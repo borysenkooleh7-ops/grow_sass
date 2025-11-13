@@ -1,0 +1,17 @@
+/**
+ * WhatsApp Automation Rules Styles
+ * Styles for automation rules management page
+ */
+
+.automation-rule-card {
+    border-left: 4px solid #ffc107;
+    transition: all 0.3s;
+}
+
+.automation-rule-card:hover {
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.trigger-info, .actions-info, .stats-info {
+    font-size: 13px;
+}

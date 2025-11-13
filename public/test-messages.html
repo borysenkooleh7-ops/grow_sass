@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages Test Page</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Messages Page Styles */
+        .messages-container {
+            height: calc(100vh - 120px);
+            background: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+
+        .messages-left-panel {
+            height: 100%;
+            background: #fff;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .messages-left-panel .panel-header {
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .messages-left-panel .main-tabs {
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            flex-shrink: 0;
+        }
+
+        .messages-left-panel .main-tabs .nav-tabs {
+            border: none;
+            background: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+
+        .messages-left-panel .main-tabs .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+            font-weight: 500;
+            padding: 1rem 1.5rem;
+            font-size: 0.9375rem;
+            border-radius: 0;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .messages-left-panel .main-tabs .nav-tabs .nav-link.active {
+            color: #28a745;
+            background: #fff;
+            border-bottom: 3px solid #28a745;
+            font-weight: 600;
+        }
+
+        .messages-left-panel .sub-tabs {
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            flex-shrink: 0;
+        }
+
+        .messages-left-panel .sub-tabs .nav-tabs {
+            border: none;
+            background: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+
+        .messages-left-panel .sub-tabs .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+            font-weight: 500;
+            padding: 0.75rem 1rem;
+            font-size: 0.8125rem;
+            border-radius: 0;
+            transition: all 0.2s ease;
+        }
+
+        .messages-left-panel .sub-tabs .nav-tabs .nav-link.active {
+            color: #28a745;
+            background: #fff;
+            border-bottom: 2px solid #28a745;
+            font-weight: 600;
+        }
+
+        .messages-left-panel .tickets-list {
+            flex: 1;
+            background: #fff;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .messages-left-panel .ticket-item {
+            border-bottom: 1px solid #f8f9fa;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .messages-left-panel .ticket-item:hover {
+            background: #f8f9fa;
+            transform: translateX(2px);
+        }
+
+        .messages-left-panel .ticket-item.active {
+            background: #e3f2fd;
+            border-left: 3px solid #007bff;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+        }
+
+        .messages-left-panel .ticket-item .ticket-content {
+            padding: 1.25rem;
+        }
+
+        .messages-left-panel .ticket-item .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+
+        .messages-left-panel .ticket-item .ticket-title {
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+            font-size: 0.9375rem;
+            line-height: 1.3;
+            flex: 1;
+            margin-right: 0.75rem;
+        }
+
+        .messages-left-panel .ticket-item .ticket-id {
+            color: #6c757d;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: #f8f9fa;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            white-space: nowrap;
+        }
+
+        .messages-left-panel .ticket-item .ticket-meta {
+            font-size: 0.75rem;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .messages-left-panel .ticket-item .ticket-status {
+            font-size: 0.6875rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .messages-left-panel .ticket-item .ticket-status.open {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .messages-left-panel .ticket-item .ticket-status.on-hold {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        /* Scrollable content areas */
+        .scrollable-content {
+            max-height: calc(100vh - 400px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .scrollable-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scrollable-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .scrollable-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .scrollable-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Right Panel Styles */
+        .messages-right-panel {
+            height: 100%;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        }
+
+        .messages-right-panel .chat-header {
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .messages-right-panel .chat-placeholder {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #6c757d;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .messages-right-panel .chat-placeholder i {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.3;
+        }
+
+        .messages-right-panel .chat-placeholder h5 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #495057;
+        }
+
+        .messages-right-panel .chat-placeholder p {
+            font-size: 0.9375rem;
+            margin: 0;
+            opacity: 0.8;
+            line-height: 1.5;
+        }
+
+        /* Empty state styling */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            opacity: 0.4;
+        }
+
+        .empty-state h6 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #495057;
+        }
+
+        .empty-state p {
+            font-size: 0.875rem;
+            margin: 0;
+            opacity: 0.8;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .scrollable-content {
+                max-height: calc(100vh - 350px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Page Heading -->
+        <div class="row page-titles">
+            <div class="col-md-5 align-self-center">
+                <h3 class="text-success">Tickets & Messages</h3>
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="#">Home</a></li>
+                    <li class="breadcrumb-item active">Tickets & Messages</li>
+                </ol>
+            </div>
+            
+            <div class="col-md-7 align-self-center text-right d-none d-md-block">
+                <div class="d-flex justify-content-end align-items-center">
+                    <button type="button" class="btn btn-success btn-lg mr-2" id="new_ticket_btn">
+                        <i class="fas fa-plus mr-2"></i>New Ticket
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-lg" id="refresh_tickets_btn">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages Container -->
+        <div class="row messages-container">
+            <!-- Left Panel -->
+            <div class="col-xl-4 col-lg-5 col-md-6">
+                <div class="messages-left-panel">
+                    <!-- Panel Header -->
+                    <div class="panel-header">
+                        <h5><i class="fas fa-ticket-alt mr-2"></i>Tickets</h5>
+                    </div>
+
+                    <!-- Main Tabs -->
+                    <div class="main-tabs">
+                        <ul class="nav nav-tabs" id="main_tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link active" id="team-tab" data-toggle="tab" href="#team-content" role="tab">
+                                    <i class="fas fa-users mr-1"></i>Team
+                                </a>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link" id="whatsapp-tab" data-toggle="tab" href="#whatsapp-content" role="tab">
+                                    <i class="fab fa-whatsapp mr-1"></i>WhatsApp
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Sub Tabs -->
+                    <div class="sub-tabs" id="sub_tabs">
+                        <ul class="nav nav-tabs" id="sub_tabs_nav" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link active" id="all-users-tab" data-toggle="tab" href="#all-users-content" role="tab">
+                                    <i class="fas fa-users mr-1"></i>All Users
+                                </a>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link" id="online-users-tab" data-toggle="tab" href="#online-users-content" role="tab">
+                                    <i class="fas fa-user-check mr-1"></i>Online Users
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div class="tab-content" id="main_tabs_content">
+                        <!-- Team Tab -->
+                        <div class="tab-pane fade show active" id="team-content" role="tabpanel">
+                            <div class="tab-content" id="sub_tabs_content">
+                                <!-- All Users Sub Tab -->
+                                <div class="tab-pane fade show active" id="all-users-content" role="tabpanel">
+                                    <div class="users-container scrollable-content">
+                                        <div class="ticket-item user-item active" id="user_1" data-user-id="1" data-user-name="Martin Alejandro Peralta">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Martin Alejandro Peralta</h6>
+                                                        <span class="ticket-id">martin@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Sales
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="ticket-item user-item" id="user_2" data-user-id="2" data-user-name="Juan Carlos Rodriguez">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Juan Carlos Rodriguez</h6>
+                                                        <span class="ticket-id">juan@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Support
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="ticket-item user-item" id="user_3" data-user-id="3" data-user-name="Maria Elena Santos">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Maria Elena Santos</h6>
+                                                        <span class="ticket-id">maria@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status on-hold">Offline</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Technical
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="ticket-item user-item" id="user_4" data-user-id="4" data-user-name="Agustina Biasco">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Agustina Biasco</h6>
+                                                        <span class="ticket-id">agustina@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Agent
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Support
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Online Users Sub Tab -->
+                                <div class="tab-pane fade" id="online-users-content" role="tabpanel">
+                                    <div class="users-container scrollable-content">
+                                        <div class="ticket-item user-item" id="user_1" data-user-id="1" data-user-name="Martin Alejandro Peralta">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Martin Alejandro Peralta</h6>
+                                                        <span class="ticket-id">martin@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Sales
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="ticket-item user-item" id="user_2" data-user-id="2" data-user-name="Juan Carlos Rodriguez">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Juan Carlos Rodriguez</h6>
+                                                        <span class="ticket-id">juan@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Support
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="ticket-item user-item" id="user_4" data-user-id="4" data-user-name="Agustina Biasco">
+                                            <div class="ticket-content">
+                                                <div class="ticket-header">
+                                                    <div class="ticket-info">
+                                                        <h6 class="ticket-title">Agustina Biasco</h6>
+                                                        <span class="ticket-id">agustina@example.com</span>
+                                                    </div>
+                                                    <span class="ticket-status open">Online</span>
+                                                </div>
+                                                <div class="ticket-meta">
+                                                    <small>
+                                                        <i class="fas fa-user mr-1"></i>
+                                                        Customer
+                                                    </small>
+                                                    <br><small>
+                                                        <i class="fas fa-building mr-1"></i>
+                                                        Support
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- WhatsApp Tab -->
+                        <div class="tab-pane fade" id="whatsapp-content" role="tabpanel">
+                            <div class="whatsapp-container scrollable-content">
+                                <div class="ticket-item whatsapp-connection" id="whatsapp_connection_1" data-connection-id="1">
+                                    <div class="ticket-content">
+                                        <div class="ticket-header">
+                                            <div class="ticket-info">
+                                                <h6 class="ticket-title">Main WhatsApp Channel</h6>
+                                                <span class="ticket-id">WhatsApp</span>
+                                            </div>
+                                            <span class="ticket-status open">Connected</span>
+                                        </div>
+                                        <div class="ticket-meta">
+                                            <small>
+                                                <i class="fas fa-phone mr-1"></i>
+                                                +1 (555) 123-4567
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="ticket-item whatsapp-connection" id="whatsapp_connection_2" data-connection-id="2">
+                                    <div class="ticket-content">
+                                        <div class="ticket-header">
+                                            <div class="ticket-info">
+                                                <h6 class="ticket-title">Support WhatsApp</h6>
+                                                <span class="ticket-id">WhatsApp</span>
+                                            </div>
+                                            <span class="ticket-status on-hold">Disconnected</span>
+                                        </div>
+                                        <div class="ticket-meta">
+                                            <small>
+                                                <i class="fas fa-phone mr-1"></i>
+                                                +1 (555) 987-6543
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="col-xl-8 col-lg-7 col-md-6">
+                <div class="messages-right-panel">
+                    <div class="chat-header">
+                        <div class="contact-info">
+                            <h5>Select a user or WhatsApp connection to start chatting</h5>
+                            <div class="contact-id">No selection</div>
+                            <div class="assigned-to">Choose from the left panel</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-placeholder">
+                        <i class="fas fa-comments"></i>
+                        <h5>Welcome to Messages</h5>
+                        <p>Select a user from the left panel to start a conversation or choose a WhatsApp connection to manage messages.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Initialize variables
+            let currentSelectedUser = null;
+            let currentSelectedConnection = null;
+
+            // Initialize tab functionality
+            function initializeTabs() {
+                // Main tabs (Team/WhatsApp)
+                $('#main_tabs .nav-link').on('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs
+                    $('#main_tabs .nav-link').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    // Hide all tab content
+                    $('#main_tabs_content .tab-pane').removeClass('show active');
+                    
+                    // Show selected tab content
+                    const target = $(this).attr('href');
+                    $(target).addClass('show active');
+                    
+                    // Reset sub-tabs when switching main tabs
+                    if (target === '#team-content') {
+                        $('#sub_tabs_nav .nav-link').first().addClass('active');
+                        $('#sub_tabs_content .tab-pane').removeClass('show active');
+                        $('#all-users-content').addClass('show active');
+                    }
+                });
+
+                // Sub tabs (All Users/Online Users)
+                $('#sub_tabs_nav .nav-link').on('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all sub tabs
+                    $('#sub_tabs_nav .nav-link').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    // Hide all sub tab content
+                    $('#sub_tabs_content .tab-pane').removeClass('show active');
+                    
+                    // Show selected sub tab content
+                    const target = $(this).attr('href');
+                    $(target).addClass('show active');
+                });
+            }
+
+            // Initialize user selection
+            function initializeUserSelection() {
+                // Handle user item clicks
+                $(document).on('click', '.user-item', function() {
+                    const userId = $(this).data('user-id');
+                    const userName = $(this).data('user-name');
+                    
+                    // Remove active class from all users
+                    $('.user-item').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    // Update current selection
+                    currentSelectedUser = userId;
+                    currentSelectedConnection = null;
+                    
+                    // Update right panel
+                    updateRightPanelForUser(userId, userName);
+                });
+
+                // Handle WhatsApp connection clicks
+                $(document).on('click', '.whatsapp-connection', function() {
+                    const connectionId = $(this).data('connection-id');
+                    const connectionName = $(this).find('.ticket-title').text();
+                    
+                    // Remove active class from all connections
+                    $('.whatsapp-connection').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    // Update current selection
+                    currentSelectedConnection = connectionId;
+                    currentSelectedUser = null;
+                    
+                    // Update right panel
+                    updateRightPanelForWhatsApp(connectionId, connectionName);
+                });
+            }
+
+            // Update right panel for user selection
+            function updateRightPanelForUser(userId, userName) {
+                $('.chat-header .contact-info h5').text(userName);
+                $('.chat-header .contact-info .contact-id').text('Internal User');
+                $('.chat-header .contact-info .assigned-to').text('Direct Message');
+                
+                $('.chat-placeholder').html(`
+                    <i class="fas fa-user"></i>
+                    <h5>Chat with ${userName}</h5>
+                    <p>You can now send messages to this user. The chat interface will be loaded here.</p>
+                `);
+            }
+
+            // Update right panel for WhatsApp connection
+            function updateRightPanelForWhatsApp(connectionId, connectionName) {
+                $('.chat-header .contact-info h5').text(connectionName);
+                $('.chat-header .contact-info .contact-id').text('WhatsApp Connection');
+                $('.chat-header .contact-info .assigned-to').text('WhatsApp Channel');
+                
+                $('.chat-placeholder').html(`
+                    <i class="fab fa-whatsapp"></i>
+                    <h5>WhatsApp: ${connectionName}</h5>
+                    <p>Manage WhatsApp messages for this connection. The message interface will be loaded here.</p>
+                `);
+            }
+
+            // Initialize everything
+            initializeTabs();
+            initializeUserSelection();
+
+            // Handle button clicks
+            $('#new_ticket_btn, #refresh_tickets_btn').on('click', function() {
+                alert('This would create a new ticket or refresh the list in the full application.');
+            });
+
+            // Test scrolling functionality
+            console.log('Messages test page loaded successfully!');
+            console.log('Features tested:');
+            console.log('- Tab switching between Team and WhatsApp');
+            console.log('- Sub-tab switching between All Users and Online Users');
+            console.log('- User selection and right panel updates');
+            console.log('- WhatsApp connection selection');
+            console.log('- Scrollable content areas in left panel');
+            console.log('- Responsive design');
+        });
+    </script>
+</body>
+</html>
+

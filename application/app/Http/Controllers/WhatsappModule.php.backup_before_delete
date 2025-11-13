@@ -1,0 +1,2197 @@
+<?php
+
+/**
+ * @fileoverview WhatsApp Module Controller
+ * @description Main controller for standalone WhatsApp module with conversations, connections, dashboard
+ */
+
+namespace App\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Repositories\WhatsappTicketRepository;
+use App\Repositories\WhatsappMessageRepository;
+use App\Repositories\WhatsappContactRepository;
+use App\Services\WatiService;
+use App\Models\WhatsappConnection;
+use App\Models\WhatsappTicket;
+use App\Models\WhatsappContact;
+use App\Models\WhatsappTag;
+use App\Models\WhatsappQuickTemplate;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class WhatsappModule extends Controller
+{
+    protected $ticketrepo;
+    protected $messagerepo;
+    protected $contactrepo;
+    protected $watiService;
+
+    public function __construct(
+        WhatsappTicketRepository $ticketrepo,
+        WhatsappMessageRepository $messagerepo,
+        WhatsappContactRepository $contactrepo,
+        WatiService $watiService
+    ) {
+        parent::__construct();
+
+        $this->middleware('auth');
+
+        $this->ticketrepo = $ticketrepo;
+        $this->messagerepo = $messagerepo;
+        $this->contactrepo = $contactrepo;
+        $this->watiService = $watiService;
+    }
+
+    /**
+     * Main WhatsApp module page - redirects to conversations
+     */
+    public function index()
+    {
+        return redirect()->route('whatsapp.conversations');
+    }
+
+    /**
+     * Conversations page with three tabs: En espera, Abiertas, Cerrados
+     * This is the main WhatsApp module interface
+     * Connection management removed - uses single WATI connection
+     */
+    public function conversations(Request $request)
+    {
+        // Get filter parameters
+        $status = $request->get('status', 'on_hold'); // on_hold, open, closed
+        $search = $request->get('search', '');
+        $tag = $request->get('tag', '');
+
+        // Base query for tickets
+        $tickets = WhatsappTicket::with([
+            'connection',
+            'contact',
+            'client',
+            'assignedAgent',
+        ])->orderBy('whatsappticket_updated', 'desc');
+
+        // Filter by status
+        if ($status) {
+            $tickets->where('whatsappticket_status', $status);
+        }
+
+        // Search filter
+        if ($search) {
+            $tickets->where(function($q) use ($search) {
+                // Search in ticket subject
+                $q->where('whatsappticket_subject', 'like', "%{$search}%")
+                  // Search in related contact
+                  ->orWhereHas('contact', function($q2) use ($search) {
+                      $q2->where('whatsappcontact_name', 'like', "%{$search}%")
+                         ->orWhere('whatsappcontact_phone', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Paginate
+        $tickets = $tickets->paginate(30);
+
+        // Get all tags for filter dropdown
+        $tags = WhatsappTag::all();
+
+        // Count by status for tabs
+        $statusCounts = [
+            'on_hold' => WhatsappTicket::where('whatsappticket_status', 'on_hold')->count(),
+            'open' => WhatsappTicket::where('whatsappticket_status', 'open')->count(),
+            'resolved' => WhatsappTicket::where('whatsappticket_status', 'resolved')->count(),
+            'closed' => WhatsappTicket::where('whatsappticket_status', 'closed')->count(),
+        ];
+
+        // Check WATI connection status
+        $isConnected = WhatsappConnection::isWatiConnected();
+
+        // Page config
+        $page = $this->pageSettings('whatsapp');
+
+        return view('pages.whatsapp-module.conversations', compact(
+            'tickets',
+            'page',
+            'status',
+            'tags',
+            'statusCounts',
+            'isConnected'
+        ));
+    }
+
+    /**
+     * QR Scan Page - Show QR code for WhatsApp connection
+     * WATI-only mode - single connection with QR scan
+     */
+    public function qrScan()
+    {
+        // Get default WATI connection
+        $connection = WhatsappConnection::getDefaultConnection();
+
+        // Check if already connected
+        $isConnected = WhatsappConnection::isWatiConnected();
+
+        // Get connection status details
+        $connectionStatus = 'disconnected';
+        $phoneNumber = null;
+
+        if ($connection) {
+            $connectionStatus = $connection->whatsappconnection_status;
+            $phoneNumber = $connection->whatsappconnection_phone;
+        }
+
+        // Page config
+        $page = $this->pageSettings('whatsapp_qr_scan');
+
+        return view('pages.whatsapp-module.qr-scan', compact(
+            'connection',
+            'isConnected',
+            'connectionStatus',
+            'phoneNumber',
+            'page'
+        ));
+    }
+
+    /**
+     * Get QR Code from WATI API
+     * Returns QR code as JSON for display
+     */
+    public function getQRCode()
+    {
+        try {
+            // Check if WATI is configured
+            if (!$this->watiService->isConfigured()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'WATI is not configured. Please check your environment settings.',
+                ], 500);
+            }
+
+            // Get QR code from WATI
+            $result = $this->watiService->getQRCode();
+
+            if ($result['success']) {
+                // Update QR code in database
+                WhatsappConnection::updateQRCode($result['qr_code']);
+
+                return response()->json([
+                    'success' => true,
+                    'qr_code' => $result['qr_code'],
+                    'status' => $result['status'] ?? 'pending',
+                    'message' => 'QR code retrieved successfully',
+                ]);
+            }
+
+            return response()->json($result, 400);
+
+        } catch (\Exception $e) {
+            \Log::error('WhatsApp QR Code Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve QR code',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Check QR Scan Status
+     * Returns current connection status
+     */
+    public function checkQRStatus()
+    {
+        try {
+            // Check status via WATI API
+            $result = $this->watiService->checkQRStatus();
+
+            if ($result['success'] && $result['status'] === 'connected') {
+                // Mark connection as connected in database
+                WhatsappConnection::markDefaultAsConnected($result['phone'] ?? null);
+
+                return response()->json([
+                    'success' => true,
+                    'status' => 'connected',
+                    'phone' => $result['phone'] ?? null,
+                    'message' => 'WhatsApp connected successfully!',
+                ]);
+            }
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            \Log::error('WhatsApp Status Check Error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'status' => 'error',
+                'message' => 'Failed to check connection status',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Refresh QR Code
+     * Clears cache and gets new QR code
+     */
+    public function refreshQRCode()
+    {
+        try {
+            // Clear cached QR code
+            $this->watiService->refreshQRCode();
+
+            // Get fresh QR code
+            return $this->getQRCode();
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to refresh QR code',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Show create connection form
+     */
+    public function createForm()
+    {
+        // Initialize empty connection object
+        $connection = new WhatsappConnection();
+        $url = url('/whatsapp/connections/create');
+
+        // Response payload
+        $payload = [
+            'connection' => $connection,
+            'url' => $url,
+        ];
+
+        // Return modal using Response class
+        return new CreateConnectionResponse($payload);
+    }
+
+    /**
+     * Show edit connection form
+     */
+    public function editConnection($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+        $url = url('/whatsapp/connections/' . $connectionId . '/update');
+
+        // Response payload
+        $payload = [
+            'connection' => $connection,
+            'url' => $url,
+        ];
+
+        // Return modal using Response class
+        return new CreateConnectionResponse($payload);
+    }
+
+    /**
+     * Update existing connection
+     */
+    public function updateConnection(Request $request, $connectionId)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'type' => 'required|string|in:evolution,wati',
+        ]);
+
+        try {
+            $connection = WhatsappConnection::findOrFail($connectionId);
+            $type = $request->type;
+
+            $updateData = [
+                'whatsappconnection_name' => $request->name,
+                'whatsappconnection_phone' => $request->phone,
+                'whatsappconnection_is_active' => $request->has('is_active') ? 1 : 0,
+            ];
+
+            // Update type-specific fields - QR Code connections only
+            switch ($type) {
+                case 'evolution':
+                    if ($request->filled('api_url')) {
+                        $updateData['whatsappconnection_webhook_url'] = $request->api_url;
+                    }
+                    if ($request->filled('api_key')) {
+                        $updateData['whatsappconnection_api_key'] = $request->api_key;
+                    }
+                    break;
+
+                case 'wati':
+                    if ($request->filled('api_url')) {
+                        $updateData['whatsappconnection_webhook_url'] = $request->api_url;
+                    }
+                    if ($request->filled('access_token')) {
+                        $updateData['whatsappconnection_api_key'] = $request->access_token;
+                    }
+                    break;
+            }
+
+            $connection->update($updateData);
+
+            // Success notification
+            $jsondata['notification'] = array('type' => 'success', 'value' => __('lang.request_has_been_completed'));
+
+            // Close modal
+            $jsondata['dom_visibility'][] = array('selector' => '#commonModal', 'action' => 'close-modal');
+
+            // Reload page to show updated connection
+            $jsondata['redirect_url'] = url('/whatsapp/connections');
+
+            return response()->json($jsondata);
+
+        } catch (\Exception $e) {
+            \Log::error('WhatsApp connection update error: ' . $e->getMessage());
+
+            // Error notification
+            $jsondata['notification'] = array('type' => 'error', 'value' => __('lang.request_could_not_be_completed') . ': ' . $e->getMessage());
+
+            return response()->json($jsondata, 500);
+        }
+    }
+
+    /**
+     * Get connection type specific fields
+     */
+    public function getConnectionFields($type)
+    {
+        $connection = new WhatsappConnection();
+        $html = view('pages.whatsapp-module.modals.connection-fields', compact('type', 'connection'))->render();
+        return response($html);
+    }
+
+    /**
+     * Create new WhatsApp connection instance
+     */
+    public function createConnection(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'type' => 'required|string|in:evolution,wati',
+        ]);
+
+        try {
+            $type = $request->type;
+            $connectionData = [
+                'whatsappconnection_name' => $request->name,
+                'whatsappconnection_phone' => $request->phone,
+                'whatsappconnection_status' => 'pending',
+            ];
+
+            // Handle different connection types - QR Code connections only
+            switch ($type) {
+                case 'evolution':
+                    // Generate unique instance ID
+                    $instanceId = 'growsass_' . Str::random(10);
+                    $apiUrl = $request->api_url ?? config('whatsapp.evolution_api_url', 'http://localhost:8080');
+                    $apiKey = $request->api_key ?? config('whatsapp.evolution_api_key');
+
+                    try {
+                        // Create instance via Evolution API
+                        $client = new \GuzzleHttp\Client(['timeout' => 30]);
+                        $response = $client->post($apiUrl . '/instance/create', [
+                            'headers' => [
+                                'apikey' => $apiKey,
+                                'Content-Type' => 'application/json',
+                            ],
+                            'json' => [
+                                'instanceName' => $instanceId,
+                                'qrcode' => true,
+                                'integration' => 'WHATSAPP-BAILEYS',
+                            ],
+                        ]);
+
+                        $responseData = json_decode($response->getBody(), true);
+                        $connectionData['whatsappconnection_qr_code'] = $responseData['qrcode']['base64'] ?? null;
+                    } catch (\Exception $e) {
+                        \Log::warning('Evolution API not reachable, creating connection without QR: ' . $e->getMessage());
+                    }
+
+                    $connectionData['whatsappconnection_webhook_url'] = $apiUrl;
+                    $connectionData['whatsappconnection_api_key'] = $apiKey;
+                    $connectionData['whatsappconnection_instance_id'] = $instanceId;
+                    break;
+
+                case 'wati':
+                    // WATI uses QR code
+                    $connectionData['whatsappconnection_webhook_url'] = $request->api_url ?? config('wati.api_endpoint', 'https://app-server.wati.io');
+                    $connectionData['whatsappconnection_api_key'] = $request->access_token ?? config('wati.access_token');
+                    $connectionData['whatsappconnection_instance_id'] = 'wati_' . Str::random(10);
+                    break;
+            }
+
+            // Add type and unique ID
+            $connectionData['whatsappconnection_type'] = $type;
+            $connectionData['whatsappconnection_uniqueid'] = \Illuminate\Support\Str::uuid();
+            $connectionData['whatsappconnection_creatorid'] = auth()->id();
+            $connectionData['whatsappconnection_is_active'] = $request->has('is_active') ? 1 : 0;
+
+            // Create connection in database
+            $connection = WhatsappConnection::create($connectionData);
+
+            // Success notification
+            $jsondata['notification'] = array('type' => 'success', 'value' => __('lang.request_has_been_completed'));
+
+            // Close modal
+            $jsondata['dom_visibility'][] = array('selector' => '#commonModal', 'action' => 'close-modal');
+
+            // Reload page to show new connection
+            $jsondata['redirect_url'] = url('/whatsapp/connections');
+
+            return response()->json($jsondata);
+
+        } catch (\Exception $e) {
+            \Log::error('WhatsApp connection creation error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            // Error notification
+            $jsondata['notification'] = array('type' => 'error', 'value' => __('lang.request_could_not_be_completed') . ': ' . $e->getMessage());
+
+            return response()->json($jsondata, 500);
+        }
+    }
+
+    /**
+     * Get connection setup instructions
+     */
+    private function getConnectionInstructions($type)
+    {
+        $instructions = [
+            'wati' => 'Connection created! Please scan QR code from WATI dashboard: https://app.wati.io/',
+            'evolution' => 'Connection created! Click "View QR Code" to scan with your WhatsApp mobile app.',
+            'twilio' => 'Connection created! Your Twilio WhatsApp number is ready to use.',
+            'meta' => 'Connection created! Your Meta Cloud API connection is ready.',
+            '360dialog' => 'Connection created! Your 360Dialog connection is ready.',
+        ];
+
+        return $instructions[$type] ?? 'Connection created successfully!';
+    }
+
+    /**
+     * Get QR code for connection
+     */
+    public function getQRCode($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        // Return cached QR code if available
+        if ($connection->whatsappconnection_qr_code) {
+            return response()->json([
+                'success' => true,
+                'qrcode' => $connection->whatsappconnection_qr_code,
+            ]);
+        }
+
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get(
+                $connection->whatsappconnection_webhook_url . '/instance/qrcode/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $responseData = json_decode($response->getBody(), true);
+            $qrCode = $responseData['qrcode']['base64'] ?? $responseData['base64'] ?? null;
+
+            // Cache QR code
+            if ($qrCode) {
+                $connection->whatsappconnection_qr_code = $qrCode;
+                $connection->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'qrcode' => $qrCode,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get QR code as JSON for auto-refresh
+     */
+    public function getQRCodeJson($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        // Return cached QR code if available and not expired (30 seconds)
+        if ($connection->whatsappconnection_qr_code && $connection->whatsappconnection_qr_updated) {
+            $qrAge = now()->diffInSeconds($connection->whatsappconnection_qr_updated);
+            if ($qrAge < 30) {
+                return response()->json([
+                    'success' => true,
+                    'qr_code' => $connection->whatsappconnection_qr_code,
+                ]);
+            }
+        }
+
+        // Fetch new QR code
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get(
+                $connection->whatsappconnection_webhook_url . '/instance/qrcode/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $responseData = json_decode($response->getBody(), true);
+            $qrCode = $responseData['qrcode']['base64'] ?? $responseData['base64'] ?? null;
+
+            // Cache QR code with timestamp
+            if ($qrCode) {
+                $connection->whatsappconnection_qr_code = $qrCode;
+                $connection->whatsappconnection_qr_updated = now();
+                $connection->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'qr_code' => $qrCode,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Force refresh QR code
+     */
+    public function refreshQRCode($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        // Clear cached QR code to force refresh
+        $connection->whatsappconnection_qr_code = null;
+        $connection->whatsappconnection_qr_updated = null;
+        $connection->save();
+
+        // Fetch new QR code
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get(
+                $connection->whatsappconnection_webhook_url . '/instance/qrcode/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $responseData = json_decode($response->getBody(), true);
+            $qrCode = $responseData['qrcode']['base64'] ?? $responseData['base64'] ?? null;
+
+            // Cache new QR code
+            if ($qrCode) {
+                $connection->whatsappconnection_qr_code = $qrCode;
+                $connection->whatsappconnection_qr_updated = now();
+                $connection->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'qr_code' => $qrCode,
+                'message' => __('lang.qr_code_refreshed'),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get connection status
+     */
+    public function getConnectionStatus($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get(
+                $connection->whatsappconnection_webhook_url . '/instance/connectionState/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $responseData = json_decode($response->getBody(), true);
+
+            // Update connection status
+            if (isset($responseData['state']) && $responseData['state'] === 'open') {
+                $connection->whatsappconnection_status = 'connected';
+                $connection->whatsappconnection_last_connected = now();
+                $connection->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'status' => $connection->whatsappconnection_status,
+                'state' => $responseData,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all connections status (for auto-refresh)
+     */
+    public function getAllConnectionsStatus()
+    {
+        try {
+            $connections = \App\Models\WhatsappConnection::orderBy('whatsappconnection_created', 'desc')->get();
+
+            // Build simple status array
+            $statuses = [];
+            foreach ($connections as $connection) {
+                $statuses[] = [
+                    'id' => $connection->whatsappconnection_id,
+                    'name' => $connection->whatsappconnection_name,
+                    'status' => $connection->whatsappconnection_status,
+                    'phone' => $connection->whatsappconnection_phone,
+                    'type' => $connection->whatsappconnection_type,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'html' => '', // Empty for now, can be populated later if needed
+                'connections' => $statuses,
+                'count' => $connections->count(),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete connection
+     */
+    public function deleteConnection($connectionId)
+    {
+        try {
+            $connection = WhatsappConnection::findOrFail($connectionId);
+
+            // Try to logout from Evolution API if webhook URL is configured
+            // Don't fail the deletion if API logout fails
+            if (!empty($connection->whatsappconnection_webhook_url) && !empty($connection->whatsappconnection_instance_id)) {
+                try {
+                    $client = new \GuzzleHttp\Client(['timeout' => 5]);
+                    $client->delete(
+                        $connection->whatsappconnection_webhook_url . '/instance/logout/' . $connection->whatsappconnection_instance_id,
+                        [
+                            'headers' => [
+                                'apikey' => $connection->whatsappconnection_api_key,
+                            ],
+                        ]
+                    );
+                } catch (\Exception $apiError) {
+                    // Log API error but continue with deletion
+                    \Log::warning('Failed to logout from Evolution API during connection deletion', [
+                        'connection_id' => $connectionId,
+                        'error' => $apiError->getMessage()
+                    ]);
+                }
+            }
+
+            // Delete from database - this should always happen
+            $connection->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection deleted successfully',
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Failed to delete WhatsApp connection', [
+                'connection_id' => $connectionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Test connection
+     */
+    public function testConnection($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->get(
+                $connection->whatsappconnection_webhook_url . '/instance/connectionState/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection test successful',
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Connection test failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Reconnect connection
+     */
+    public function reconnectConnection($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        try {
+            $client = new \GuzzleHttp\Client();
+            $response = $client->post(
+                $connection->whatsappconnection_webhook_url . '/instance/connect/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $connection->whatsappconnection_status = 'pending';
+            $connection->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Reconnection initiated. Please scan QR code.',
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Reconnection failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Disconnect connection
+     */
+    public function disconnectConnection($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        try {
+            $client = new \GuzzleHttp\Client();
+            $client->post(
+                $connection->whatsappconnection_webhook_url . '/instance/logout/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                    ],
+                ]
+            );
+
+            $connection->whatsappconnection_status = 'disconnected';
+            $connection->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection disconnected successfully',
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Disconnect failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Dashboard page with analytics and reports
+     */
+    public function dashboard(Request $request)
+    {
+        $dateFrom = $request->get('date_from', now()->subDays(30)->format('Y-m-d'));
+        $dateTo = $request->get('date_to', now()->format('Y-m-d'));
+        $connection = $request->get('connection', '');
+        $user = $request->get('user', '');
+        $tag = $request->get('tag', '');
+
+        // Get metrics
+        $metrics = $this->calculateMetrics($dateFrom, $dateTo, $connection, $user, $tag);
+
+        // Get all connections for filter
+        $connections = WhatsappConnection::where('whatsappconnection_is_active', 1)->get();
+
+        // Get all users for filter
+        $users = User::where('type', 'team')->get();
+
+        // Get all tags for filter
+        $tags = WhatsappTag::all();
+
+        // Page config
+        $page = $this->pageSettings('whatsapp_dashboard');
+
+        return view('pages.whatsapp-module.dashboard', compact(
+            'metrics',
+            'connections',
+            'users',
+            'tags',
+            'page',
+            'dateFrom',
+            'dateTo'
+        ));
+    }
+
+    /**
+     * Calculate metrics for dashboard
+     */
+    private function calculateMetrics($dateFrom, $dateTo, $connection = null, $user = null, $tag = null)
+    {
+        $query = WhatsappTicket::whereBetween('whatsappticket_created', [$dateFrom, $dateTo]);
+
+        if ($connection) {
+            $query->where('whatsappticket_connectionid', $connection);
+        }
+
+        if ($user) {
+            $query->where('whatsappticket_assigned_to', $user);
+        }
+
+        $tickets = $query->get();
+
+        // Chats created
+        $chatsCreated = $tickets->count();
+
+        // Chats resolved
+        $chatsResolved = $tickets->whereIn('whatsappticket_status', ['resolved', 'closed'])->count();
+
+        // Average response time (time from ticket creation to first agent message)
+        $responseTimes = [];
+        foreach ($tickets as $ticket) {
+            $firstResponse = $ticket->messages()
+                ->where('whatsappmessage_direction', 'outgoing')
+                ->whereNotNull('whatsappmessage_userid')
+                ->orderBy('whatsappmessage_created', 'asc')
+                ->first();
+
+            if ($firstResponse) {
+                $diff = $ticket->whatsappticket_created->diffInSeconds($firstResponse->whatsappmessage_created);
+                $responseTimes[] = $diff;
+            }
+        }
+
+        $avgResponseTime = count($responseTimes) > 0 ? array_sum($responseTimes) / count($responseTimes) : 0;
+
+        // Average resolution time (time from ticket creation to resolution)
+        $resolutionTimes = [];
+        foreach ($tickets->where('whatsappticket_status', 'resolved') as $ticket) {
+            if ($ticket->whatsappticket_resolved_at) {
+                $diff = $ticket->whatsappticket_created->diffInSeconds($ticket->whatsappticket_resolved_at);
+                $resolutionTimes[] = $diff;
+            }
+        }
+
+        $avgResolutionTime = count($resolutionTimes) > 0 ? array_sum($resolutionTimes) / count($resolutionTimes) : 0;
+
+        // Status distribution
+        $statusDistribution = $tickets->groupBy('whatsappticket_status')
+            ->map(function($group) {
+                return [
+                    'count' => $group->count(),
+                    'status' => $group->first()->whatsappticket_status,
+                ];
+            })
+            ->sortByDesc('count');
+
+        return [
+            'chats_created' => $chatsCreated,
+            'chats_resolved' => $chatsResolved,
+            'avg_response_time' => $avgResponseTime,
+            'avg_resolution_time' => $avgResolutionTime,
+            'status_distribution' => $statusDistribution,
+            'tickets' => $tickets,
+        ];
+    }
+
+    /**
+     * Get metrics API endpoint
+     */
+    public function getMetrics(Request $request)
+    {
+        $metrics = $this->calculateMetrics(
+            $request->date_from,
+            $request->date_to,
+            $request->connection,
+            $request->user,
+            $request->tag
+        );
+
+        return response()->json([
+            'success' => true,
+            'metrics' => $metrics,
+        ]);
+    }
+
+    /**
+     * Export report
+     */
+    public function exportReport(Request $request)
+    {
+        $metrics = $this->calculateMetrics(
+            $request->date_from,
+            $request->date_to,
+            $request->connection,
+            $request->user,
+            $request->tag
+        );
+
+        // Create CSV
+        $filename = 'whatsapp_report_' . date('Y-m-d_H-i-s') . '.csv';
+        $filepath = storage_path('app/temp/' . $filename);
+
+        // Ensure directory exists
+        if (!file_exists(storage_path('app/temp'))) {
+            mkdir(storage_path('app/temp'), 0755, true);
+        }
+
+        $file = fopen($filepath, 'w');
+
+        // Headers
+        fputcsv($file, ['WhatsApp Report']);
+        fputcsv($file, ['Generated on', now()->format('Y-m-d H:i:s')]);
+        fputcsv($file, ['Date Range', $request->date_from . ' to ' . $request->date_to]);
+        fputcsv($file, []);
+
+        // Metrics
+        fputcsv($file, ['Metric', 'Value']);
+        fputcsv($file, ['Chats Created', $metrics['chats_created']]);
+        fputcsv($file, ['Chats Resolved', $metrics['chats_resolved']]);
+        fputcsv($file, ['Average Response Time (seconds)', round($metrics['avg_response_time'])]);
+        fputcsv($file, ['Average Resolution Time (seconds)', round($metrics['avg_resolution_time'])]);
+        fputcsv($file, []);
+
+        // Ticket details
+        fputcsv($file, ['Ticket ID', 'Contact', 'Phone', 'Status', 'Priority', 'Created']);
+        foreach ($metrics['tickets'] as $ticket) {
+            fputcsv($file, [
+                $ticket->whatsappticket_id,
+                $ticket->contact ? $ticket->contact->whatsappcontact_name : 'Unknown',
+                $ticket->contact ? $ticket->contact->whatsappcontact_phone : 'N/A',
+                $ticket->whatsappticket_status,
+                $ticket->whatsappticket_priority ?? 'normal',
+                $ticket->whatsappticket_created->format('Y-m-d H:i:s'),
+            ]);
+        }
+
+        fclose($file);
+
+        return response()->download($filepath)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Tags management page
+     */
+    public function tags()
+    {
+        $tags = WhatsappTag::withCount('contacts')->get();
+
+        // Page config
+        $page = $this->pageSettings('whatsapp_tags');
+
+        return view('pages.whatsapp-module.tags', compact('tags', 'page'));
+    }
+
+    /**
+     * Create tag
+     */
+    public function createTag(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:100',
+            'color' => 'required|string|max:20',
+        ]);
+
+        $tag = WhatsappTag::create([
+            'whatsapptag_uniqueid' => Str::uuid(),
+            'whatsapptag_name' => $request->name,
+            'whatsapptag_color' => $request->color,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'tag' => $tag,
+        ]);
+    }
+
+    /**
+     * Update tag
+     */
+    public function updateTag(Request $request, $tagId)
+    {
+        $tag = WhatsappTag::findOrFail($tagId);
+
+        $tag->update([
+            'whatsapptag_name' => $request->name,
+            'whatsapptag_color' => $request->color,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'tag' => $tag,
+        ]);
+    }
+
+    /**
+     * Delete tag
+     */
+    public function deleteTag($tagId)
+    {
+        $tag = WhatsappTag::findOrFail($tagId);
+        $tag->delete();
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    /**
+     * Assign tags to contact
+     */
+    public function assignTags(Request $request, $contactId)
+    {
+        $contact = WhatsappContact::findOrFail($contactId);
+
+        $currentTags = json_decode($contact->whatsappcontact_tags, true) ?? [];
+        $newTags = array_merge($currentTags, $request->tag_ids ?? []);
+        $newTags = array_unique($newTags);
+
+        $contact->whatsappcontact_tags = json_encode(array_values($newTags));
+        $contact->save();
+
+        return response()->json([
+            'success' => true,
+            'contact' => $contact,
+        ]);
+    }
+
+    /**
+     * Remove tags from contact
+     */
+    public function removeTags(Request $request, $contactId)
+    {
+        $contact = WhatsappContact::findOrFail($contactId);
+
+        $currentTags = json_decode($contact->whatsappcontact_tags, true) ?? [];
+        $tagsToRemove = $request->tag_ids ?? [];
+        $newTags = array_diff($currentTags, $tagsToRemove);
+
+        $contact->whatsappcontact_tags = json_encode(array_values($newTags));
+        $contact->save();
+
+        return response()->json([
+            'success' => true,
+            'contact' => $contact,
+        ]);
+    }
+
+    /**
+     * Get templates
+     */
+    public function getTemplates()
+    {
+        $templates = WhatsappQuickTemplate::where(function($q) {
+            $q->whereNull('whatsapptemplate_userid')
+              ->orWhere('whatsapptemplate_userid', auth()->id());
+        })->get();
+
+        return response()->json([
+            'success' => true,
+            'templates' => $templates,
+        ]);
+    }
+
+    /**
+     * Send template message (for 24h window expiry)
+     */
+    public function sendTemplate(Request $request)
+    {
+        $request->validate([
+            'ticket_id' => 'required|integer',
+            'template_id' => 'required|integer',
+        ]);
+
+        $ticket = WhatsappTicket::findOrFail($request->ticket_id);
+        $template = WhatsappQuickTemplate::findOrFail($request->template_id);
+
+        // Create message
+        $messageData = [
+            'ticketid' => $ticket->whatsappticket_id,
+            'contactid' => $ticket->whatsappticket_contactid,
+            'userid' => auth()->id(),
+            'direction' => 'outgoing',
+            'channel' => 'whatsapp',
+            'type' => 'text',
+            'content' => $template->whatsapptemplate_content,
+            'status' => 'pending',
+        ];
+
+        $result = $this->messagerepo->create($messageData);
+
+        if (!$result['success']) {
+            return response()->json($result, 400);
+        }
+
+        $message = $result['message'];
+
+        // Send via Evolution API using template
+        try {
+            $connection = $ticket->connection;
+
+            $client = new \GuzzleHttp\Client();
+            $response = $client->post(
+                $connection->whatsappconnection_webhook_url . '/message/sendText/' . $connection->whatsappconnection_instance_id,
+                [
+                    'headers' => [
+                        'apikey' => $connection->whatsappconnection_api_key,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => [
+                        'number' => $ticket->contact->whatsappcontact_phone,
+                        'text' => $template->whatsapptemplate_content,
+                    ],
+                ]
+            );
+
+            $responseData = json_decode($response->getBody(), true);
+            $message->markAsSent($responseData['key']['id'] ?? 'template_' . time());
+
+        } catch (\Exception $e) {
+            \Log::error('Template send error: ' . $e->getMessage());
+            $message->whatsappmessage_status = 'failed';
+            $message->whatsappmessage_error = $e->getMessage();
+            $message->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+        ]);
+    }
+
+    /**
+     * Send WhatsApp to user from Users table
+     */
+    public function sendToUser(Request $request, $userId)
+    {
+        $user = User::findOrFail($userId);
+
+        // Find or create contact for this user
+        $phone = $user->phone ?? $user->mobile ?? null;
+
+        if (!$phone) {
+            return response()->json([
+                'success' => false,
+                'error' => 'User has no phone number',
+            ], 400);
+        }
+
+        // Get default connection
+        $connection = WhatsappConnection::where('whatsappconnection_is_active', 1)->first();
+
+        if (!$connection) {
+            return response()->json([
+                'success' => false,
+                'error' => 'No active WhatsApp connection',
+            ], 400);
+        }
+
+        // Use integration service to get or create contact
+        $integrationService = app(\App\Services\WhatsappIntegrationService::class);
+        $contact = $integrationService->getOrCreateContact($phone, $user->full_name, $connection->whatsappconnection_id);
+
+        // Find or create ticket for this contact
+        $ticket = WhatsappTicket::where('whatsappticket_contactid', $contact->whatsappcontact_id)
+            ->where('whatsappticket_status', '!=', 'closed')
+            ->first();
+
+        if (!$ticket) {
+            $ticket = $integrationService->createTicket([
+                'contactid' => $contact->whatsappcontact_id,
+                'connectionid' => $connection->whatsappconnection_id,
+                'status' => 'open',
+                'priority' => 'medium',
+                'subject' => 'Message to ' . $user->full_name
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'ticket_id' => $ticket->whatsappticket_id,
+            'redirect_url' => url('/whatsapp/conversations?ticket=' . $ticket->whatsappticket_id),
+        ]);
+    }
+
+    /**
+     * Get conversation for specific ticket
+     */
+    public function getTicketConversation($ticketId)
+    {
+        $ticket = WhatsappTicket::with(['contact', 'messages'])->findOrFail($ticketId);
+
+        return response()->json([
+            'success' => true,
+            'ticket' => $ticket,
+            'messages' => $ticket->messages,
+        ]);
+    }
+
+    /**
+     * Get conversation for specific contact
+     */
+    public function getContactConversation($contactId)
+    {
+        $contact = WhatsappContact::with(['tickets.messages'])->findOrFail($contactId);
+
+        return response()->json([
+            'success' => true,
+            'contact' => $contact,
+            'tickets' => $contact->tickets,
+        ]);
+    }
+
+    /**
+     * Send message (with media support)
+     */
+    public function sendMessage(Request $request)
+    {
+        $request->validate([
+            'ticket_id' => 'required|exists:whatsapp_tickets,whatsappticket_id',
+            'message' => 'required|string',
+            'channel' => 'in:whatsapp,email',
+            'is_internal' => 'boolean',
+        ]);
+
+        $ticket = WhatsappTicket::find($request->ticket_id);
+        $isInternal = $request->get('is_internal', 0);
+
+        // Create message
+        $message = \App\Models\WhatsappMessage::create([
+            'whatsappmessage_uniqueid' => str_unique(),
+            'whatsappmessage_ticketid' => $ticket->whatsappticket_id,
+            'whatsappmessage_contactid' => $ticket->whatsappticket_contactid,
+            'whatsappmessage_userid' => auth()->id(),
+            'whatsappmessage_direction' => 'outgoing',
+            'whatsappmessage_channel' => $request->get('channel', 'whatsapp'),
+            'whatsappmessage_type' => 'text',
+            'whatsappmessage_content' => $request->message,
+            'whatsappmessage_status' => 'pending',
+            'whatsappmessage_is_internal_note' => $isInternal,
+        ]);
+
+        // Handle file attachment
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $path = $file->storeAs('whatsapp/media', $filename, 'public');
+
+            $message->whatsappmessage_media_url = asset('storage/' . $path);
+            $message->whatsappmessage_media_filename = $file->getClientOriginalName();
+            $message->whatsappmessage_media_mime = $file->getMimeType();
+            $message->whatsappmessage_media_size = $file->getSize();
+            $message->whatsappmessage_type = strpos($file->getMimeType(), 'image') !== false ? 'image' : 'document';
+            $message->save();
+        }
+
+        // If not internal note, send via integration
+        if (!$isInternal) {
+            $integrationService = app(\App\Services\WhatsappIntegrationService::class);
+            $integrationService->sendMessage($message);
+        }
+
+        // Update ticket
+        $ticket->whatsappticket_last_message_at = now();
+        $ticket->whatsappticket_status = 'open';
+        $ticket->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.message_sent'),
+            'data' => $message,
+        ]);
+    }
+
+    /**
+     * Assign ticket to agent
+     */
+    public function assignTicket(Request $request)
+    {
+        $request->validate([
+            'ticket_id' => 'required|exists:whatsapp_tickets,whatsappticket_id',
+            'agent_id' => 'nullable|exists:users,id',
+        ]);
+
+        $ticket = WhatsappTicket::find($request->ticket_id);
+        $ticket->whatsappticket_assigned_to = $request->agent_id;
+        $ticket->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.ticket_assigned'),
+        ]);
+    }
+
+    /**
+     * Update ticket status
+     */
+    public function updateTicketStatus(Request $request)
+    {
+        $request->validate([
+            'ticket_id' => 'required|exists:whatsapp_tickets,whatsappticket_id',
+            'status' => 'required|in:on_hold,open,resolved,closed',
+        ]);
+
+        $ticket = WhatsappTicket::find($request->ticket_id);
+        $ticket->changeStatus($request->status);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.status_updated'),
+        ]);
+    }
+
+    /**
+     * Close ticket with type selection
+     */
+    public function closeTicket(Request $request)
+    {
+        $request->validate([
+            'ticket_id' => 'required|exists:whatsapp_tickets,whatsappticket_id',
+            'ticket_type_id' => 'required|exists:whatsapp_ticket_types,whatsapptickettype_id',
+            'closure_reason' => 'nullable|string',
+            'send_closure_message' => 'boolean',
+        ]);
+
+        $ticket = WhatsappTicket::find($request->ticket_id);
+
+        // Set ticket type and close
+        $ticket->whatsappticket_typeid = $request->ticket_type_id;
+        $ticket->markAsClosed();
+
+        // Send closure message if requested
+        if ($request->get('send_closure_message', false)) {
+            $automationService = app(\App\Services\WhatsappAutomationService::class);
+            $automationService->sendClosureMessage($ticket);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.ticket_closed'),
+        ]);
+    }
+
+    /**
+     * Get closure message preview for ticket
+     */
+    public function getClosureMessage($ticketId)
+    {
+        $ticket = WhatsappTicket::find($ticketId);
+        $lineConfig = \App\Models\WhatsappLineConfig::where('whatsapplineconfig_connectionid', $ticket->whatsappticket_connectionid)->first();
+
+        return response()->json([
+            'closure_message' => $lineConfig ? $lineConfig->whatsapplineconfig_closure_message : null,
+        ]);
+    }
+
+    /**
+     * Get contact for editing
+     */
+    public function getContactEdit($contactId)
+    {
+        $contact = WhatsappContact::find($contactId);
+
+        return response()->json([
+            'success' => true,
+            'contact' => $contact,
+        ]);
+    }
+
+    /**
+     * Update contact
+     */
+    public function updateContact(Request $request, $contactId)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'company' => 'nullable|string|max:255',
+            'tags' => 'nullable|array',
+            'client_id' => 'nullable|exists:clients,client_id',
+            'notes' => 'nullable|string',
+        ]);
+
+        $contact = WhatsappContact::find($contactId);
+        $contact->whatsappcontact_name = $request->name;
+        $contact->whatsappcontact_display_name = $request->name;
+        $contact->whatsappcontact_company = $request->company;
+        $contact->whatsappcontact_clientid = $request->client_id;
+        $contact->whatsappcontact_notes = $request->notes;
+
+        // Update tags
+        if ($request->has('tags')) {
+            $contact->whatsappcontact_tags = json_encode($request->tags);
+        }
+
+        $contact->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.contact_updated'),
+        ]);
+    }
+
+    /**
+     * List quick replies for dropdown
+     */
+    public function listQuickReplies()
+    {
+        $quickReplies = \App\Models\WhatsappQuickReply::where(function($q) {
+            $q->where('whatsappquickreply_created_by', auth()->id())
+              ->orWhere('whatsappquickreply_is_shared', true);
+        })->orderBy('whatsappquickreply_title')->get();
+
+        return response()->json([
+            'success' => true,
+            'quick_replies' => $quickReplies,
+        ]);
+    }
+
+    /**
+     * List templates for selection
+     */
+    public function listTemplates()
+    {
+        $templates = \App\Models\WhatsappTemplate::where('whatsapptemplate_is_active', true)
+            ->orderBy('whatsapptemplate_title')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'templates' => $templates,
+        ]);
+    }
+
+    /**
+     * Block a contact
+     */
+    public function blockContact($contactId)
+    {
+        $contact = WhatsappContact::findOrFail($contactId);
+        $contact->whatsappcontact_blocked = 1;
+        $contact->whatsappcontact_blocked_at = now();
+        $contact->whatsappcontact_blocked_by = auth()->id();
+        $contact->save();
+
+        \Log::info('Contact blocked', [
+            'contact_id' => $contact->whatsappcontact_id,
+            'contact_phone' => $contact->whatsappcontact_phone,
+            'blocked_by' => auth()->id()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.contact_blocked_successfully'),
+        ]);
+    }
+
+    /**
+     * Unblock a contact
+     */
+    public function unblockContact($contactId)
+    {
+        $contact = WhatsappContact::findOrFail($contactId);
+        $contact->whatsappcontact_blocked = 0;
+        $contact->whatsappcontact_blocked_at = null;
+        $contact->whatsappcontact_blocked_by = null;
+        $contact->save();
+
+        \Log::info('Contact unblocked', [
+            'contact_id' => $contact->whatsappcontact_id,
+            'contact_phone' => $contact->whatsappcontact_phone,
+            'unblocked_by' => auth()->id()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.contact_unblocked_successfully'),
+        ]);
+    }
+
+    /**
+     * Show analytics dashboard
+     */
+    public function analytics(Request $request)
+    {
+        $dateRange = $request->get('date_range', 'last_7_days');
+        $clientId = $request->get('client_id', null);
+
+        $analytics = $this->getAnalyticsData($dateRange, $clientId);
+
+        // Get all clients for filter dropdown
+        $clients = \App\Models\Client::select('client_id', 'client_company_name', 'client_first_name', 'client_last_name')
+            ->orderBy('client_company_name')
+            ->get();
+
+        $page = $this->pageSettings('whatsapp_analytics');
+
+        return view('pages.whatsapp.components.analytics', compact('analytics', 'clients', 'page', 'dateRange', 'clientId'));
+    }
+
+    /**
+     * Get analytics data
+     */
+    private function getAnalyticsData($dateRange, $clientId = null)
+    {
+        // Parse date range
+        [$startDate, $endDate] = $this->parseDateRange($dateRange);
+
+        // Base query
+        $messagesQuery = \App\Models\WhatsappMessage::whereBetween('whatsappmessage_created', [$startDate, $endDate]);
+        $ticketsQuery = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate]);
+
+        // Filter by client if specified
+        if ($clientId) {
+            $messagesQuery->whereHas('ticket', function($q) use ($clientId) {
+                $q->where('whatsappticket_clientid', $clientId);
+            });
+            $ticketsQuery->where('whatsappticket_clientid', $clientId);
+        }
+
+        // Calculate metrics
+        $totalMessages = $messagesQuery->count();
+        $totalTickets = $ticketsQuery->count();
+
+        // Average response time
+        $avgResponseTime = $this->calculateAverageResponseTime($startDate, $endDate, $clientId);
+
+        // Resolution rate
+        $resolvedTickets = (clone $ticketsQuery)->where('whatsappticket_status', 'closed')->count();
+        $resolutionRate = $totalTickets > 0 ? round(($resolvedTickets / $totalTickets) * 100, 1) : 0;
+
+        // Messages timeline
+        $messagesTimeline = $this->getMessagesTimeline($startDate, $endDate, $clientId);
+
+        // Status distribution
+        $statusDistribution = $this->getStatusDistribution($startDate, $endDate, $clientId);
+
+        // Agent performance
+        $agentPerformance = $this->getAgentPerformance($startDate, $endDate, $clientId);
+
+        // Popular hours
+        $popularHours = $this->getPopularHours($startDate, $endDate, $clientId);
+
+        // Response time distribution
+        $responseTimeDist = $this->getResponseTimeDistribution($startDate, $endDate, $clientId);
+
+        return [
+            'total_messages' => $totalMessages,
+            'total_tickets' => $totalTickets,
+            'avg_response_time' => $avgResponseTime,
+            'resolution_rate' => $resolutionRate,
+            'messages_timeline' => $messagesTimeline,
+            'status_distribution' => $statusDistribution,
+            'agent_performance' => $agentPerformance,
+            'popular_hours' => $popularHours,
+            'response_time_dist' => $responseTimeDist,
+        ];
+    }
+
+    /**
+     * Parse date range string to start and end dates
+     */
+    private function parseDateRange($dateRange)
+    {
+        $endDate = now();
+
+        switch ($dateRange) {
+            case 'today':
+                $startDate = now()->startOfDay();
+                break;
+            case 'yesterday':
+                $startDate = now()->subDay()->startOfDay();
+                $endDate = now()->subDay()->endOfDay();
+                break;
+            case 'last_7_days':
+                $startDate = now()->subDays(7)->startOfDay();
+                break;
+            case 'last_30_days':
+                $startDate = now()->subDays(30)->startOfDay();
+                break;
+            case 'this_month':
+                $startDate = now()->startOfMonth();
+                break;
+            case 'last_month':
+                $startDate = now()->subMonth()->startOfMonth();
+                $endDate = now()->subMonth()->endOfMonth();
+                break;
+            default:
+                $startDate = now()->subDays(7)->startOfDay();
+        }
+
+        return [$startDate, $endDate];
+    }
+
+    /**
+     * Calculate average response time
+     */
+    private function calculateAverageResponseTime($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate])
+            ->whereNotNull('whatsappticket_first_response_at');
+
+        if ($clientId) {
+            $query->where('whatsappticket_clientid', $clientId);
+        }
+
+        $tickets = $query->get();
+
+        if ($tickets->isEmpty()) {
+            return '0m';
+        }
+
+        $totalMinutes = 0;
+        foreach ($tickets as $ticket) {
+            $minutes = $ticket->whatsappticket_created->diffInMinutes($ticket->whatsappticket_first_response_at);
+            $totalMinutes += $minutes;
+        }
+
+        $avgMinutes = round($totalMinutes / $tickets->count());
+
+        if ($avgMinutes < 60) {
+            return $avgMinutes . 'm';
+        } else {
+            $hours = floor($avgMinutes / 60);
+            $minutes = $avgMinutes % 60;
+            return $hours . 'h ' . $minutes . 'm';
+        }
+    }
+
+    /**
+     * Get messages timeline data
+     */
+    private function getMessagesTimeline($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappMessage::whereBetween('whatsappmessage_created', [$startDate, $endDate]);
+
+        if ($clientId) {
+            $query->whereHas('ticket', function($q) use ($clientId) {
+                $q->where('whatsappticket_clientid', $clientId);
+            });
+        }
+
+        $messages = $query->selectRaw('DATE(whatsappmessage_created) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        return [
+            'labels' => $messages->pluck('date')->toArray(),
+            'data' => $messages->pluck('count')->toArray(),
+        ];
+    }
+
+    /**
+     * Get status distribution
+     */
+    private function getStatusDistribution($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate]);
+
+        if ($clientId) {
+            $query->where('whatsappticket_clientid', $clientId);
+        }
+
+        $tickets = $query->selectRaw('whatsappticket_status, COUNT(*) as count')
+            ->groupBy('whatsappticket_status')
+            ->get();
+
+        return [
+            'labels' => $tickets->pluck('whatsappticket_status')->toArray(),
+            'data' => $tickets->pluck('count')->toArray(),
+        ];
+    }
+
+    /**
+     * Get agent performance
+     */
+    private function getAgentPerformance($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\User::whereIn('type', ['admin', 'team'])
+            ->where('status', 'active');
+
+        $agents = $query->get();
+
+        foreach ($agents as $agent) {
+            $ticketsQuery = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate])
+                ->where('whatsappticket_assigned_to', $agent->id);
+
+            if ($clientId) {
+                $ticketsQuery->where('whatsappticket_clientid', $clientId);
+            }
+
+            $agent->tickets_handled = $ticketsQuery->count();
+            $agent->messages_sent = \App\Models\WhatsappMessage::whereBetween('whatsappmessage_created', [$startDate, $endDate])
+                ->where('whatsappmessage_direction', 'outgoing')
+                ->where('whatsappmessage_sent_by', $agent->id)
+                ->count();
+
+            $agent->avg_response_time = $this->calculateAgentResponseTime($agent->id, $startDate, $endDate, $clientId);
+
+            $resolved = (clone $ticketsQuery)->where('whatsappticket_status', 'closed')->count();
+            $agent->resolution_rate = $agent->tickets_handled > 0 ? round(($resolved / $agent->tickets_handled) * 100, 1) : 0;
+            $agent->satisfaction_score = 4.2; // Placeholder - would come from ratings
+        }
+
+        return $agents->filter(function($agent) {
+            return $agent->tickets_handled > 0;
+        });
+    }
+
+    /**
+     * Calculate agent response time
+     */
+    private function calculateAgentResponseTime($agentId, $startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate])
+            ->where('whatsappticket_assigned_to', $agentId)
+            ->whereNotNull('whatsappticket_first_response_at');
+
+        if ($clientId) {
+            $query->where('whatsappticket_clientid', $clientId);
+        }
+
+        $tickets = $query->get();
+
+        if ($tickets->isEmpty()) {
+            return '0m';
+        }
+
+        $totalMinutes = 0;
+        foreach ($tickets as $ticket) {
+            $minutes = $ticket->whatsappticket_created->diffInMinutes($ticket->whatsappticket_first_response_at);
+            $totalMinutes += $minutes;
+        }
+
+        $avgMinutes = round($totalMinutes / $tickets->count());
+
+        if ($avgMinutes < 60) {
+            return $avgMinutes . 'm';
+        } else {
+            $hours = floor($avgMinutes / 60);
+            $minutes = $avgMinutes % 60;
+            return $hours . 'h ' . $minutes . 'm';
+        }
+    }
+
+    /**
+     * Get popular hours data
+     */
+    private function getPopularHours($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappMessage::whereBetween('whatsappmessage_created', [$startDate, $endDate]);
+
+        if ($clientId) {
+            $query->whereHas('ticket', function($q) use ($clientId) {
+                $q->where('whatsappticket_clientid', $clientId);
+            });
+        }
+
+        $messages = $query->selectRaw('HOUR(whatsappmessage_created) as hour, COUNT(*) as count')
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->get();
+
+        $labels = [];
+        $data = [];
+
+        for ($i = 0; $i < 24; $i++) {
+            $labels[] = str_pad($i, 2, '0', STR_PAD_LEFT) . ':00';
+            $message = $messages->firstWhere('hour', $i);
+            $data[] = $message ? $message->count : 0;
+        }
+
+        return [
+            'labels' => $labels,
+            'data' => $data,
+        ];
+    }
+
+    /**
+     * Get response time distribution
+     */
+    private function getResponseTimeDistribution($startDate, $endDate, $clientId = null)
+    {
+        $query = \App\Models\WhatsappTicket::whereBetween('whatsappticket_created', [$startDate, $endDate])
+            ->whereNotNull('whatsappticket_first_response_at');
+
+        if ($clientId) {
+            $query->where('whatsappticket_clientid', $clientId);
+        }
+
+        $tickets = $query->get();
+
+        $distribution = [
+            '0-5min' => 0,
+            '5-15min' => 0,
+            '15-30min' => 0,
+            '30-60min' => 0,
+            '1h+' => 0,
+        ];
+
+        foreach ($tickets as $ticket) {
+            $minutes = $ticket->whatsappticket_created->diffInMinutes($ticket->whatsappticket_first_response_at);
+
+            if ($minutes <= 5) {
+                $distribution['0-5min']++;
+            } elseif ($minutes <= 15) {
+                $distribution['5-15min']++;
+            } elseif ($minutes <= 30) {
+                $distribution['15-30min']++;
+            } elseif ($minutes <= 60) {
+                $distribution['30-60min']++;
+            } else {
+                $distribution['1h+']++;
+            }
+        }
+
+        return [
+            'labels' => array_keys($distribution),
+            'data' => array_values($distribution),
+        ];
+    }
+
+    /**
+     * Show create conversation form
+     */
+    public function createConversation()
+    {
+        // Get active connections
+        $connections = \App\Models\WhatsappConnection::where('whatsappconnection_is_active', 1)
+            ->orderBy('whatsappconnection_name')
+            ->get();
+
+        // Get clients
+        $clients = \App\Models\Client::orderBy('client_company_name')->get();
+
+        // Get active users (agents)
+        $users = \App\Models\User::whereIn('type', ['admin', 'team'])
+            ->where('status', 'active')
+            ->orderBy('first_name')
+            ->get();
+
+        // Get tags
+        $tags = \App\Models\WhatsappTag::all();
+
+        // Get URL for form submission
+        $url = url('/whatsapp/conversations/store');
+
+        // Response payload
+        $payload = [
+            'connections' => $connections,
+            'clients' => $clients,
+            'users' => $users,
+            'tags' => $tags,
+            'url' => $url,
+        ];
+
+        // Return modal using Response class
+        return new \App\Http\Responses\WhatsappModule\CreateConversationResponse($payload);
+    }
+
+    /**
+     * Store new conversation
+     */
+    public function storeConversation(Request $request)
+    {
+        // Log incoming request data for debugging
+        \Log::info('New conversation request data:', $request->all());
+
+        $validated = $request->validate([
+            'ticket_subject' => 'required|string|max:255',
+            'phone_number' => 'required|string|max:20',
+            'contact_name' => 'required|string|max:255',
+            'initial_message' => 'nullable|string',
+            'channel' => 'required|in:whatsapp,email',
+            'connection_id' => 'required|exists:whatsapp_connections,whatsappconnection_id',
+            'assigned_to' => 'nullable|exists:users,id',
+            'priority' => 'nullable|in:low,normal,high,urgent',
+        ]);
+
+        \Log::info('Validation passed, creating conversation...');
+
+        try {
+            // Normalize phone number
+            $phoneNumber = \App\Models\WhatsappContact::normalizePhone($validated['phone_number']);
+
+            // Get connection
+            $connection = \App\Models\WhatsappConnection::findOrFail($validated['connection_id']);
+
+            // Find or create contact
+            $contact = \App\Models\WhatsappContact::where('whatsappcontact_phone', $phoneNumber)
+                ->where('whatsappcontact_connectionid', $connection->whatsappconnection_id)
+                ->first();
+
+            if (!$contact) {
+                $contact = \App\Models\WhatsappContact::create([
+                    'whatsappcontact_uniqueid' => \Illuminate\Support\Str::uuid(),
+                    'whatsappcontact_connectionid' => $connection->whatsappconnection_id,
+                    'whatsappcontact_phone' => $phoneNumber,
+                    'whatsappcontact_name' => $validated['contact_name'],
+                    'whatsappcontact_display_name' => $validated['contact_name'],
+                ]);
+            }
+
+            // Create ticket
+            $ticket = \App\Models\WhatsappTicket::create([
+                'whatsappticket_uniqueid' => \Illuminate\Support\Str::uuid(),
+                'whatsappticket_number' => \App\Models\WhatsappTicket::generateTicketNumber(),
+                'whatsappticket_connectionid' => $connection->whatsappconnection_id,
+                'whatsappticket_contactid' => $contact->whatsappcontact_id,
+                'whatsappticket_contact_name' => $validated['contact_name'],
+                'whatsappticket_contact_phone' => $phoneNumber,
+                'whatsappticket_subject' => $validated['ticket_subject'],
+                'whatsappticket_status' => 'open',
+                'whatsappticket_channel' => $validated['channel'],
+                'whatsappticket_assigned_to' => $validated['assigned_to'] ?? null,
+                'whatsappticket_priority' => $validated['priority'] ?? 'normal',
+                'whatsappticket_created_by' => auth()->id(),
+            ]);
+
+            // Send initial message if provided
+            if (!empty($validated['initial_message'])) {
+                // Create message record
+                $message = \App\Models\WhatsappMessage::create([
+                    'whatsappmessage_uniqueid' => \Illuminate\Support\Str::uuid(),
+                    'whatsappmessage_ticketid' => $ticket->whatsappticket_id,
+                    'whatsappmessage_connectionid' => $connection->whatsappconnection_id,
+                    'whatsappmessage_contactid' => $contact->whatsappcontact_id,
+                    'whatsappmessage_direction' => 'outgoing',
+                    'whatsappmessage_type' => 'text',
+                    'whatsappmessage_content' => $validated['initial_message'],
+                    'whatsappmessage_status' => 'pending',
+                    'whatsappmessage_sent_by' => auth()->id(),
+                ]);
+
+                // Dispatch job to send message via API
+                dispatch(new \App\Jobs\SendWhatsappMessageJob($message, $phoneNumber, $connection->whatsappconnection_id));
+            }
+
+            // Create SLA tracking if policy exists (optional - don't fail if SLA not configured)
+            try {
+                $slaPolicy = \App\Models\WhatsappSlaPolicy::where('whatsappslapolis_is_active', 1)
+                    ->where('whatsappslapolis_priority', $ticket->whatsappticket_priority)
+                    ->first();
+
+                if ($slaPolicy) {
+                    // Create first response SLA tracking
+                    \App\Models\WhatsappTicketSla::create([
+                        'whatsappticketsla_ticket_id' => $ticket->whatsappticket_id,
+                        'whatsappticketsla_policy_id' => $slaPolicy->whatsappslapolis_id,
+                        'whatsappticketsla_type' => 'first_response',
+                        'whatsappticketsla_target_time' => now()->addMinutes($slaPolicy->whatsappslapolis_first_response_minutes),
+                        'whatsappticketsla_status' => 'pending'
+                    ]);
+
+                    // Create resolution SLA tracking
+                    \App\Models\WhatsappTicketSla::create([
+                        'whatsappticketsla_ticket_id' => $ticket->whatsappticket_id,
+                        'whatsappticketsla_policy_id' => $slaPolicy->whatsappslapolis_id,
+                        'whatsappticketsla_type' => 'resolution',
+                        'whatsappticketsla_target_time' => now()->addMinutes($slaPolicy->whatsappslapolis_resolution_minutes),
+                        'whatsappticketsla_status' => 'pending'
+                    ]);
+                }
+            } catch (\Exception $slaError) {
+                // Log SLA error but don't fail the conversation creation
+                \Log::warning('Failed to create SLA tracking for new conversation', [
+                    'ticket_id' => $ticket->whatsappticket_id,
+                    'error' => $slaError->getMessage()
+                ]);
+            }
+
+            // Success notification
+            $jsondata['notification'] = array('type' => 'success', 'value' => __('lang.conversation_created_successfully'));
+
+            // Close modal
+            $jsondata['dom_visibility'][] = array('selector' => '#commonModal', 'action' => 'close-modal');
+
+            // Redirect to conversations page showing 'open' status (where new conversation will be)
+            $jsondata['redirect_url'] = url('/whatsapp/conversations?status=open');
+
+            return response()->json($jsondata);
+
+        } catch (\Exception $e) {
+            \Log::error('Failed to create conversation', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Error notification
+            $jsondata['notification'] = array('type' => 'error', 'value' => __('lang.request_could_not_be_completed') . ': ' . $e->getMessage());
+
+            return response()->json($jsondata, 500);
+        }
+    }
+
+    /**
+     * Page settings helper
+     */
+    private function pageSettings($page_type)
+    {
+        return [
+            'page' => $page_type,
+            'crumbs' => [
+                __('lang.whatsapp'),
+            ],
+            'crumbs_special_class' => 'main-pages-crumbs',
+            'page_heading' => __('lang.whatsapp'),
+            'meta_title' => __('lang.whatsapp'),
+        ];
+    }
+
+    /**
+     * Show line configuration form for a connection
+     */
+    public function lineConfig($connectionId)
+    {
+        $connection = WhatsappConnection::findOrFail($connectionId);
+
+        // Get or create line config for this connection
+        $config = \App\Models\WhatsappLineConfig::where('whatsapplineconfig_connectionid', $connectionId)->first();
+
+        if (!$config) {
+            // Create default config
+            $config = \App\Models\WhatsappLineConfig::create([
+                'whatsapplineconfig_uniqueid' => \Illuminate\Support\Str::uuid(),
+                'whatsapplineconfig_connectionid' => $connectionId,
+                'whatsapplineconfig_auto_assign_enabled' => false,
+                'whatsapplineconfig_auto_assign_logic' => 'round_robin',
+                'whatsapplineconfig_auto_close_enabled' => false,
+                'whatsapplineconfig_inactivity_minutes' => 60,
+                'whatsapplineconfig_business_hours_enabled' => false,
+                'whatsapplineconfig_business_hours_start' => '09:00:00',
+                'whatsapplineconfig_business_hours_end' => '17:00:00',
+                'whatsapplineconfig_business_days' => 'monday,tuesday,wednesday,thursday,friday',
+            ]);
+        }
+
+        $page = $this->pageSettings('whatsapp_line_config');
+
+        return view('pages.whatsapp-module.line-config', compact('connection', 'config', 'page'));
+    }
+
+    /**
+     * Update line configuration
+     */
+    public function updateLineConfig(Request $request, $connectionId)
+    {
+        $validated = $request->validate([
+            'welcome_message' => 'nullable|string|max:1000',
+            'away_message' => 'nullable|string|max:1000',
+            'closure_message' => 'nullable|string|max:1000',
+            'inactivity_message' => 'nullable|string|max:1000',
+            'inactivity_minutes' => 'nullable|integer|min:1|max:10080',
+            'auto_assign_enabled' => 'nullable|boolean',
+            'auto_assign_logic' => 'nullable|string|in:round_robin,least_active,random',
+            'auto_close_enabled' => 'nullable|boolean',
+            'business_hours_enabled' => 'nullable|boolean',
+            'business_hours_start' => 'nullable|date_format:H:i',
+            'business_hours_end' => 'nullable|date_format:H:i',
+            'business_days' => 'nullable|array',
+        ]);
+
+        // Get or create config
+        $config = \App\Models\WhatsappLineConfig::where('whatsapplineconfig_connectionid', $connectionId)->first();
+
+        if (!$config) {
+            $config = new \App\Models\WhatsappLineConfig();
+            $config->whatsapplineconfig_uniqueid = \Illuminate\Support\Str::uuid();
+            $config->whatsapplineconfig_connectionid = $connectionId;
+        }
+
+        // Update fields
+        $config->whatsapplineconfig_welcome_message = $request->input('welcome_message');
+        $config->whatsapplineconfig_away_message = $request->input('away_message');
+        $config->whatsapplineconfig_closure_message = $request->input('closure_message');
+        $config->whatsapplineconfig_inactivity_message = $request->input('inactivity_message');
+        $config->whatsapplineconfig_inactivity_minutes = $request->input('inactivity_minutes', 60);
+        $config->whatsapplineconfig_auto_assign_enabled = $request->has('auto_assign_enabled') ? 1 : 0;
+        $config->whatsapplineconfig_auto_assign_logic = $request->input('auto_assign_logic', 'round_robin');
+        $config->whatsapplineconfig_auto_close_enabled = $request->has('auto_close_enabled') ? 1 : 0;
+        $config->whatsapplineconfig_business_hours_enabled = $request->has('business_hours_enabled') ? 1 : 0;
+        $config->whatsapplineconfig_business_hours_start = $request->input('business_hours_start', '09:00:00');
+        $config->whatsapplineconfig_business_hours_end = $request->input('business_hours_end', '17:00:00');
+
+        // Handle business days array
+        if ($request->has('business_days')) {
+            $config->whatsapplineconfig_business_days = implode(',', $request->input('business_days'));
+        } else {
+            $config->whatsapplineconfig_business_days = '';
+        }
+
+        $config->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('lang.configuration_saved_successfully'),
+        ]);
+    }
+}

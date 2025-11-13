@@ -1,0 +1,47 @@
+# Dependency directories
+/vendor/
+/node_modules/
+/application/vendor/
+/application/node_modules/
+
+# Environment & config
+.env
+.env.*
+/application/.env
+/application/.env.*
+
+# Laravel caches & storage
+/storage/
+/application/storage/
+/application/bootstrap/cache/*.php
+/application/storage/*.key
+/application/public/hot
+/application/public/storage
+
+# Logs & runtime artifacts
+*.log
+*.cache
+.phpunit.result.cache
+/application/.phpunit.result.cache
+/application/storage/framework/*
+!/application/storage/framework/.gitignore
+/application/storage/logs/*
+!/application/storage/logs/.gitignore
+
+# IDE & editor settings
+.idea/
+.vscode/
+.claude/
+*.iml
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Windows virtual device artifacts sometimes emitted during tooling
+NUL
+nul
+**/NUL
+**/nul
+*.tmp.*
+**/*.tmp.*

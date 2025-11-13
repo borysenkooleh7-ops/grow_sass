@@ -1,0 +1,401 @@
+/**
+ * WhatsApp Components Styles
+ * Shared styles for various WhatsApp UI components
+ */
+
+/* Ticket Info Sidebar */
+.whatsapp-ticket-info {
+    background: #fff;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.ticket-info-header h5 {
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.ticket-info-body {
+    padding: 15px 0;
+}
+
+.info-item {
+    margin-bottom: 15px;
+}
+
+.info-item label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 5px;
+    color: #666;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.ticket-info-actions {
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.ticket-info-actions .btn {
+    margin-bottom: 8px;
+}
+
+/* Connection Status */
+.connection-status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.connection-status-indicator.connected {
+    background: #d4edda;
+    color: #155724;
+}
+
+.connection-status-indicator.disconnected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.connection-status-indicator.connecting {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.connection-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Quick Reply Component */
+.quick-reply-item {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quick-reply-item:hover {
+    background: #f5f5f5;
+    border-color: #25D366;
+}
+
+.quick-reply-shortcut {
+    font-weight: 600;
+    color: #25D366;
+    font-size: 14px;
+}
+
+.quick-reply-message {
+    color: #666;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+/* Templates Component */
+.template-item {
+    padding: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+}
+
+.template-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-color: #25D366;
+}
+
+.template-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.template-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 15px;
+}
+
+.template-category {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.template-content {
+    color: #666;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.template-status {
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.template-status.approved {
+    color: #2e7d32;
+}
+
+.template-status.pending {
+    color: #f57c00;
+}
+
+.template-status.rejected {
+    color: #c62828;
+}
+
+/* Media Gallery */
+.media-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    padding: 15px 0;
+}
+
+.media-item {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.media-item:hover {
+    transform: scale(1.05);
+}
+
+.media-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.media-item-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+    padding: 8px;
+    color: #fff;
+    font-size: 11px;
+}
+
+/* QR Code Modal */
+.qr-code-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.qr-code-container img {
+    max-width: 300px;
+    margin: 20px auto;
+    display: block;
+}
+
+.qr-instructions {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+    margin-top: 15px;
+}
+
+.qr-instructions ol {
+    text-align: left;
+    display: inline-block;
+    margin-top: 10px;
+}
+
+/* Template Preview Modal */
+.template-preview-container {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.template-preview-header {
+    background: #075E54;
+    color: #fff;
+    padding: 12px 15px;
+    border-radius: 8px 8px 0 0;
+    font-weight: 600;
+}
+
+.template-preview-body {
+    background: #E5DDD5;
+    padding: 20px;
+    min-height: 200px;
+}
+
+.template-preview-message {
+    background: #fff;
+    padding: 10px 12px;
+    border-radius: 7.5px;
+    border-top-left-radius: 0;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.template-preview-message.has-buttons {
+    border-radius: 7.5px 7.5px 0 0;
+    border-top-left-radius: 0;
+}
+
+.template-preview-buttons {
+    background: #fff;
+    border-top: 1px solid #e0e0e0;
+}
+
+.template-preview-button {
+    padding: 10px;
+    text-align: center;
+    border-bottom: 1px solid #e0e0e0;
+    color: #25D366;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.template-preview-button:last-child {
+    border-bottom: none;
+    border-radius: 0 0 7.5px 7.5px;
+}
+
+.template-preview-button:hover {
+    background: #f5f5f5;
+}
+
+/* Connection Status Widget */
+.whatsapp-connection-status-widget {
+    background: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.connection-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 10px;
+}
+
+.connection-status-header h6 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.connection-status-body {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.connection-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.connection-status-item:last-child {
+    border-bottom: none;
+}
+
+.connection-info {
+    flex: 1;
+}
+
+.connection-name {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.connection-phone {
+    font-size: 11px;
+}
+
+.connection-status-indicator {
+    margin-left: 10px;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.status-dot-success {
+    background: #28a745;
+}
+
+.status-dot-warning {
+    background: #ffc107;
+}
+
+.status-dot-danger {
+    background: #dc3545;
+}
+
+.status-dot-default {
+    background: #6c757d;
+}
+
+.status-dot-pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .media-gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 8px;
+    }
+}

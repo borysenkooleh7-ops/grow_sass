@@ -1,0 +1,19 @@
+  EAATgR5ZC2cqoBPzqbfyPXjoxOF1EmYZCUfXBXfBKO8uOx0BWHoZCWFUxtodpseVbncqfZBdaRqmUmD3f4rZBCXbLyhzoIl3Ph0a7h9qqisCCfzBmrG2hl3SJgmwOa1nL7Yi2dC2jKOTJnRQ7ZAJtPEebbCTrZAnAxZAyDpS5gv1ZCxIZC3w8koGGJ9KOgTCVp9Lkv  
+  nxZBiyC0Xp9MK16gZDZD
+  this user Token 👆
+  1372498137871018|--b_8pXBdjVhPJMPaxyd37zSRy8
+  this is  App Token 👆 
+
+first you should anazlye all features of whatsapp in detail, now in the whasapp pages, 
+modal appear but there is no elment like input, selection option, etc,
+plz fix the bug,
+  ------------note-----------
+Note: When fixing bugs, 
+always analyze the project's code style and fix the bugs. 
+Especially when modifying the migration of the database table, 
+analyze growcrm_landlord.sql and then modify it. 
+And when modifying the view, it is very important to analyze that HTML, CSS, and JAVASCRIPT are not in one file,
+but rather are all separated into very elaborate codes, and then fix the code to suit the aspect of this project.
+you don 't migrate the table on this project because this project run to import the sql file on the navigate by user 
+then datant database is created the automaticly, this 
+  

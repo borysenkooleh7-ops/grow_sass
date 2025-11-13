@@ -1,0 +1,6 @@
+{
+    "require-dev": {
+        "fakerphp/faker": "^1.24",
+        "barryvdh/laravel-debugbar": "^3.16"
+    }
+}
