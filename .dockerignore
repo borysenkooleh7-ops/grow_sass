@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+*.pdf
+Documentation.pdf
+
+# Environment
+.env
+.env.example
+.env.backup
+
+# IDE
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Composer
+vendor/
+
+# Application
+application/storage/logs/*
+application/storage/framework/cache/*
+application/storage/framework/sessions/*
+application/storage/framework/views/*
+!application/storage/logs/.gitkeep
+!application/storage/framework/cache/.gitkeep
+!application/storage/framework/sessions/.gitkeep
+!application/storage/framework/views/.gitkeep
+
+# Testing
+phpunit.xml
+.phpunit.result.cache
+
+# Build artifacts
+*.log
+*.cache
+
+# Deployment scripts (not needed in container)
+deploy.sh
+check-status.sh
+DEPLOYMENT_INSTRUCTIONS.md
+README_DEPLOYMENT.md
