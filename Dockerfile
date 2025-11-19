@@ -28,7 +28,14 @@ RUN apk add --no-cache \
     icu-libs \
     icu-data-full \
     imap-dev \
-    krb5-dev
+    krb5-dev \
+    python3 \
+    py3-pip \
+    linux-headers \
+    libc6-compat
+
+# Setup Python for node-gyp (required by node-sass)
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Configure PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
