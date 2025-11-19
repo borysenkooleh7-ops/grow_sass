@@ -25,7 +25,10 @@ RUN apk add --no-cache \
     imagemagick \
     autoconf \
     g++ \
-    make
+    make \
+    icu-dev \
+    icu-libs \
+    icu-data-full
 
 # Configure PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
