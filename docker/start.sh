@@ -48,5 +48,8 @@ chown -R www-data:www-data /var/www/growcrm
 chmod -R 775 /var/www/growcrm/storage
 chmod -R 775 /var/www/growcrm/bootstrap/cache
 
+# Create supervisor log directory
+mkdir -p /var/log/supervisor
+
 echo "Starting services with Supervisor..."
 /usr/bin/supervisord -c /etc/supervisord.conf
