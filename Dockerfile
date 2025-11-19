@@ -64,36 +64,37 @@ WORKDIR /var/www/growcrm
 # Copy application files
 COPY . .
 
-# Copy application folder to root and setup
-RUN cp -r application/* . || true
-
-# Create a temporary .env file for composer scripts
-RUN touch .env && \
-    echo "APP_KEY=base64:temporary_key_for_build_only_replace_me=" >> .env
+# Create a temporary .env file for composer scripts in application folder
+RUN touch application/.env && \
+    echo "APP_KEY=base64:temporary_key_for_build_only_replace_me=" >> application/.env
 
 # Create required directories
-RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+RUN mkdir -p application/storage/logs application/storage/framework/cache application/storage/framework/sessions application/storage/framework/views application/bootstrap/cache
 
 # Set permissions before composer install
-RUN chmod -R 775 storage bootstrap/cache
+RUN chmod -R 775 application/storage application/bootstrap/cache
 
-# Install PHP dependencies (skip scripts that need database)
+# Install PHP dependencies in application folder (skip scripts that need database)
+WORKDIR /var/www/growcrm/application
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Run autoload dump without scripts (package:discover runs at startup)
 RUN composer dump-autoload --optimize --no-scripts
+
+# Go back to root directory
+WORKDIR /var/www/growcrm
 
 # Note: Assets are pre-compiled in /public directory
 # Skip npm build - no webpack.mix.js configuration exists
 # If future builds are needed, create webpack.mix.js first
 
 # Remove temporary .env (will be provided by Railway environment variables)
-RUN rm -f .env
+RUN rm -f application/.env
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/growcrm \
-    && chmod -R 775 storage \
-    && chmod -R 775 bootstrap/cache
+    && chmod -R 775 application/storage \
+    && chmod -R 775 application/bootstrap/cache
 
 # Configure Nginx
 COPY docker/nginx.conf /etc/nginx/nginx.conf
