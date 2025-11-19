@@ -18,9 +18,7 @@ RUN apk add --no-cache \
     git \
     unzip \
     bash \
-    c-client \
     openssl-dev \
-    imap-dev \
     imagemagick-dev \
     imagemagick \
     autoconf \
@@ -28,24 +26,29 @@ RUN apk add --no-cache \
     make \
     icu-dev \
     icu-libs \
-    icu-data-full
+    icu-data-full \
+    imap-dev \
+    krb5-dev
 
 # Configure PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-configure imap --with-imap --with-imap-ssl \
-    && docker-php-ext-install -j$(nproc) \
-    pdo_mysql \
-    mysqli \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    xml \
-    zip \
-    soap \
-    intl \
-    imap
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+
+# Configure IMAP with Kerberos and SSL support
+RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl
+
+# Install PHP extensions one by one for better error handling
+RUN docker-php-ext-install -j$(nproc) pdo_mysql
+RUN docker-php-ext-install -j$(nproc) mysqli
+RUN docker-php-ext-install -j$(nproc) mbstring
+RUN docker-php-ext-install -j$(nproc) exif
+RUN docker-php-ext-install -j$(nproc) pcntl
+RUN docker-php-ext-install -j$(nproc) bcmath
+RUN docker-php-ext-install -j$(nproc) gd
+RUN docker-php-ext-install -j$(nproc) xml
+RUN docker-php-ext-install -j$(nproc) zip
+RUN docker-php-ext-install -j$(nproc) soap
+RUN docker-php-ext-install -j$(nproc) intl
+RUN docker-php-ext-install -j$(nproc) imap
 
 # Install Redis extension
 RUN pecl install redis imagick \
