@@ -1,4 +1,5 @@
 # Multi-stage build for Grow CRM on Railway
+# Build timestamp: 2024-11-19-v2 - Force rebuild
 FROM php:8.2-fpm-alpine AS base
 
 # Install system dependencies
