@@ -93,11 +93,14 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 RUN composer dump-autoload --optimize --no-scripts
 
 # Install Node dependencies and build assets
-# Use --ignore-scripts to skip node-sass native compilation
-# Then install sass as replacement
-RUN npm install --legacy-peer-deps --ignore-scripts && \
-    npm install sass@1.69.0 --save-dev --legacy-peer-deps && \
-    npm run production
+# Step 1: Install dependencies without running scripts
+RUN npm install --legacy-peer-deps --ignore-scripts
+
+# Step 2: Install sass as node-sass replacement
+RUN npm install sass@1.69.0 --save-dev --legacy-peer-deps
+
+# Step 3: Build assets (show errors clearly)
+RUN npm run production || (cat /root/.npm/_logs/*.log 2>/dev/null; exit 1)
 
 # Remove temporary .env (will be provided by Railway environment variables)
 RUN rm -f .env
