@@ -27,18 +27,9 @@ RUN apk add --no-cache \
     icu-libs \
     icu-data-full \
     imap-dev \
-    krb5-dev \
-    python3 \
-    py3-pip \
-    linux-headers \
-    libc6-compat
+    krb5-dev
 
-# Install Node.js 16 (compatible with node-sass 4.14.1)
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.16/main/ nodejs=16.20.2-r0 npm=8.10.0-r0 || \
-    (curl -fsSL https://unofficial-builds.nodejs.org/download/release/v16.20.2/node-v16.20.2-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1)
-
-# Setup Python for node-gyp (required by node-sass)
-RUN ln -sf /usr/bin/python3 /usr/bin/python
+# Note: Node.js not needed - assets are pre-compiled
 
 # Configure PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
@@ -92,15 +83,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 # Run autoload dump without scripts (package:discover runs at startup)
 RUN composer dump-autoload --optimize --no-scripts
 
-# Install Node dependencies and build assets
-# Step 1: Install dependencies without running scripts
-RUN npm install --legacy-peer-deps --ignore-scripts
-
-# Step 2: Install sass as node-sass replacement
-RUN npm install sass@1.69.0 --save-dev --legacy-peer-deps
-
-# Step 3: Build assets (show errors clearly)
-RUN npm run production || (cat /root/.npm/_logs/*.log 2>/dev/null; exit 1)
+# Note: Assets are pre-compiled in /public directory
+# Skip npm build - no webpack.mix.js configuration exists
+# If future builds are needed, create webpack.mix.js first
 
 # Remove temporary .env (will be provided by Railway environment variables)
 RUN rm -f .env
