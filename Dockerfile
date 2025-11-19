@@ -79,8 +79,8 @@ RUN chmod -R 775 storage bootstrap/cache
 # Install PHP dependencies (skip scripts that need database)
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
-# Run post-install scripts manually (skip package:discover for now)
-RUN composer dump-autoload --optimize
+# Run autoload dump without scripts (package:discover runs at startup)
+RUN composer dump-autoload --optimize --no-scripts
 
 # Install Node dependencies and build assets
 RUN npm install && npm run production
