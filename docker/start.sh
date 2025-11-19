@@ -42,11 +42,31 @@ php artisan config:cache || echo "Config cache failed"
 php artisan route:cache || echo "Route cache failed"
 php artisan view:cache || echo "View cache failed"
 
+# Create required directories
+echo "Creating required directories..."
+mkdir -p /var/www/growcrm/updates
+mkdir -p /var/www/growcrm/storage/avatars
+mkdir -p /var/www/growcrm/storage/logos/clients
+mkdir -p /var/www/growcrm/storage/logos/app
+mkdir -p /var/www/growcrm/storage/files
+mkdir -p /var/www/growcrm/storage/temp
+mkdir -p /var/www/growcrm/application/storage/app/public
+mkdir -p /var/www/growcrm/application/storage/app/purifier/HTML
+mkdir -p /var/www/growcrm/application/storage/cache/data
+mkdir -p /var/www/growcrm/application/storage/debugbar
+mkdir -p /var/www/growcrm/application/storage/framework/cache/data
+mkdir -p /var/www/growcrm/application/storage/framework/sessions
+mkdir -p /var/www/growcrm/application/storage/framework/testing
+mkdir -p /var/www/growcrm/application/storage/framework/views
+mkdir -p /var/www/growcrm/application/storage/logs
+
 # Fix permissions
 echo "Setting permissions..."
 chown -R www-data:www-data /var/www/growcrm
 chmod -R 775 /var/www/growcrm/storage
 chmod -R 775 /var/www/growcrm/bootstrap/cache
+chmod -R 775 /var/www/growcrm/updates
+chmod -R 775 /var/www/growcrm/application/storage
 
 # Create supervisor log directory
 mkdir -p /var/log/supervisor
