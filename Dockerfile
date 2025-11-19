@@ -6,8 +6,6 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     mysql-client \
-    nodejs \
-    npm \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
@@ -33,6 +31,10 @@ RUN apk add --no-cache \
     py3-pip \
     linux-headers \
     libc6-compat
+
+# Install Node.js 16 (compatible with node-sass 4.14.1)
+RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.16/main/ nodejs=16.20.2-r0 npm=8.10.0-r0 || \
+    (curl -fsSL https://unofficial-builds.nodejs.org/download/release/v16.20.2/node-v16.20.2-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1)
 
 # Setup Python for node-gyp (required by node-sass)
 RUN ln -sf /usr/bin/python3 /usr/bin/python
