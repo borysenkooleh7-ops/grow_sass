@@ -3,6 +3,9 @@ set -e
 
 echo "Starting Grow CRM on Railway..."
 
+# Change to application directory where artisan is located
+cd /var/www/growcrm/application
+
 # Run package discovery (needs environment variables)
 echo "Running package discovery..."
 php artisan package:discover --ansi || echo "Package discovery completed with warnings"
@@ -63,8 +66,8 @@ mkdir -p /var/www/growcrm/application/storage/logs
 # Fix permissions
 echo "Setting permissions..."
 chown -R www-data:www-data /var/www/growcrm
-chmod -R 775 /var/www/growcrm/storage
-chmod -R 775 /var/www/growcrm/bootstrap/cache
+chmod -R 775 /var/www/growcrm/storage || true
+chmod -R 775 /var/www/growcrm/application/bootstrap/cache
 chmod -R 775 /var/www/growcrm/updates
 chmod -R 775 /var/www/growcrm/application/storage
 
