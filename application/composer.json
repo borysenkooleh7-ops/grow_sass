@@ -30,7 +30,8 @@
     "spatie/laravel-multitenancy": "^3.0",
     "stripe/stripe-php": "^7.33",
     "twbs/bootstrap": "4.0.0-beta.2",
-    "webklex/php-imap": "^5.5"
+    "webklex/php-imap": "^5.5",
+    "predis/predis": "^2.0"
   },
   "require-dev": {
     "barryvdh/laravel-debugbar": "^3.15",
