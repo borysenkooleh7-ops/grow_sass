@@ -63,17 +63,30 @@ WORKDIR /var/www/growcrm
 # Copy application files
 COPY . .
 
-# Copy application folder to root
+# Copy application folder to root and setup
 RUN cp -r application/* . || true
 
-# Install PHP dependencies
-RUN cd /var/www/growcrm && \
-    composer install --no-dev --optimize-autoloader --no-interaction
+# Create a temporary .env file for composer scripts
+RUN touch .env && \
+    echo "APP_KEY=base64:temporary_key_for_build_only_replace_me=" >> .env
+
+# Create required directories
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+
+# Set permissions before composer install
+RUN chmod -R 775 storage bootstrap/cache
+
+# Install PHP dependencies (skip scripts that need database)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Run post-install scripts manually (skip package:discover for now)
+RUN composer dump-autoload --optimize
 
 # Install Node dependencies and build assets
-RUN cd /var/www/growcrm && \
-    npm install && \
-    npm run production
+RUN npm install && npm run production
+
+# Remove temporary .env (will be provided by Railway environment variables)
+RUN rm -f .env
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/growcrm \

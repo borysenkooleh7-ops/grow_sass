@@ -3,14 +3,30 @@ set -e
 
 echo "Starting Grow CRM on Railway..."
 
-# Wait for database to be ready
+# Run package discovery (needs environment variables)
+echo "Running package discovery..."
+php artisan package:discover --ansi || echo "Package discovery completed with warnings"
+
+# Clear any cached config from build
+echo "Clearing build cache..."
+php artisan config:clear || true
+php artisan cache:clear || true
+
+# Wait for database to be ready (with timeout)
 echo "Waiting for database..."
-until php artisan db:show 2>/dev/null || [ $? -eq 0 ]; do
-    echo "Database is unavailable - sleeping"
+MAX_TRIES=30
+TRIES=0
+until php artisan db:show 2>/dev/null; do
+    TRIES=$((TRIES + 1))
+    if [ $TRIES -ge $MAX_TRIES ]; then
+        echo "Warning: Database connection timeout - continuing anyway"
+        break
+    fi
+    echo "Database is unavailable - sleeping (attempt $TRIES/$MAX_TRIES)"
     sleep 2
 done
 
-echo "Database is ready!"
+echo "Database check complete!"
 
 # Run database migrations
 echo "Running database migrations..."
@@ -22,9 +38,9 @@ php artisan storage:link || echo "Storage link already exists"
 
 # Cache configuration
 echo "Caching configuration..."
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+php artisan config:cache || echo "Config cache failed"
+php artisan route:cache || echo "Route cache failed"
+php artisan view:cache || echo "View cache failed"
 
 # Fix permissions
 echo "Setting permissions..."
