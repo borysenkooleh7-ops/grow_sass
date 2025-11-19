@@ -92,7 +92,11 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 RUN composer dump-autoload --optimize --no-scripts
 
 # Install Node dependencies and build assets
-RUN npm install && npm run production
+# Replace node-sass with sass (dart-sass) to avoid native compilation issues
+RUN npm install --legacy-peer-deps && \
+    npm uninstall node-sass --save || true && \
+    npm install sass --save-dev && \
+    npm run production
 
 # Remove temporary .env (will be provided by Railway environment variables)
 RUN rm -f .env
