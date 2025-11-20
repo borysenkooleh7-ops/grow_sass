@@ -16,12 +16,12 @@ class AppServiceProvider extends ServiceProvider {
     public function boot(UrlGenerator $url) {
 
         //[growcrm] disable debug bar in production mode
-        if (!env('APP_DEBUG_TOOLBAR') && class_exists(\Barryvdh\Debugbar\Facades\Debugbar::class)) {
+        if (!config('app.debug_toolbar') && class_exists(\Barryvdh\Debugbar\Facades\Debugbar::class)) {
             \Debugbar::disable();
         }
 
-        //[growcrm] force SSL rul's
-        if (env('ENFORCE_SSL', false)) {
+        //[growcrm] force SSL urls - always force HTTPS in production or when ENFORCE_SSL is set
+        if (config('app.enforce_ssl') || app()->environment('production') || isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
             $url->forceScheme('https');
         }
 
