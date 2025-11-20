@@ -52,7 +52,8 @@ return [
         //[MT]
         'tenant' => [
             'driver' => 'mysql',
-            'unix_socket' => 'C:/xampp/mysql/mysql.sock',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
             'database' => '',
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
@@ -66,7 +67,8 @@ return [
         //MULTITENANCY
         'landlord' => [
             'driver' => 'mysql',
-            'unix_socket' => 'C:/xampp/mysql/mysql.sock',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
             'database' => env('LANDLORD_DB_DATABASE', 'growcrm_landlord'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
