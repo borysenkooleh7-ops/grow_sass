@@ -20,9 +20,17 @@ class AppServiceProvider extends ServiceProvider {
             \Debugbar::disable();
         }
 
-        //[growcrm] force SSL urls - always force HTTPS in production or when ENFORCE_SSL is set
-        if (config('app.enforce_ssl') || app()->environment('production') || isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+        //[growcrm] force SSL urls - always force HTTPS in production or when behind proxy
+        // Check multiple conditions to ensure HTTPS is forced
+        $forceHttps = config('app.enforce_ssl')
+            || app()->environment('production')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+            || (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_HOST']) && strpos($_SERVER['HTTP_HOST'], 'railway.app') !== false);
+
+        if ($forceHttps) {
             $url->forceScheme('https');
+            \Illuminate\Support\Facades\URL::forceScheme('https');
         }
 
         //[growcrm] - use bootstrap css for paginator
