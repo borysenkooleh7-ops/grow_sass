@@ -11,6 +11,7 @@ mkdir -p /var/www/growcrm/storage/logos/clients
 mkdir -p /var/www/growcrm/storage/logos/app
 mkdir -p /var/www/growcrm/storage/files
 mkdir -p /var/www/growcrm/storage/temp
+mkdir -p /var/www/growcrm/storage/logs
 mkdir -p /var/www/growcrm/application/storage/app/public
 mkdir -p /var/www/growcrm/application/storage/app/purifier/HTML
 mkdir -p /var/www/growcrm/application/storage/cache/data
