@@ -60,7 +60,7 @@ echo "Database check complete!"
 
 # Run database migrations on landlord database
 echo "Running database migrations..."
-php artisan migrate --database=landlord --force || echo "Migration skipped or failed"
+php artisan migrate --database=landlord --path=database/migrations/landlord --force || echo "Migration skipped or failed"
 
 # Create storage symlink
 echo "Creating storage symlink..."
