@@ -61,8 +61,9 @@ echo "Database check complete!"
 # Import landlord SQL if settings table is empty (first run setup)
 echo "Checking if database needs initialization..."
 
-# MySQL connection options - disable SSL for Railway internal network
-MYSQL_OPTS="--ssl-mode=DISABLED -h $DB_HOST -P $DB_PORT -u $DB_USERNAME -p$DB_PASSWORD"
+# MySQL/MariaDB connection options - disable SSL for Railway internal network
+# Use --skip-ssl which works with both MySQL and MariaDB clients
+MYSQL_OPTS="--skip-ssl -h $DB_HOST -P $DB_PORT -u $DB_USERNAME -p$DB_PASSWORD"
 
 SETTINGS_COUNT=$(mysql $MYSQL_OPTS "$LANDLORD_DB_DATABASE" -N -e "SELECT COUNT(*) FROM settings WHERE settings_id='default'" 2>/dev/null || echo "0")
 
