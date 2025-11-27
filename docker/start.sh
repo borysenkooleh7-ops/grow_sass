@@ -60,21 +60,25 @@ echo "Database check complete!"
 
 # Import landlord SQL if settings table is empty (first run setup)
 echo "Checking if database needs initialization..."
-SETTINGS_COUNT=$(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USERNAME" -p"$DB_PASSWORD" "$LANDLORD_DB_DATABASE" -N -e "SELECT COUNT(*) FROM settings WHERE settings_id='default'" 2>/dev/null || echo "0")
+
+# MySQL connection options - disable SSL for Railway internal network
+MYSQL_OPTS="--ssl-mode=DISABLED -h $DB_HOST -P $DB_PORT -u $DB_USERNAME -p$DB_PASSWORD"
+
+SETTINGS_COUNT=$(mysql $MYSQL_OPTS "$LANDLORD_DB_DATABASE" -N -e "SELECT COUNT(*) FROM settings WHERE settings_id='default'" 2>/dev/null || echo "0")
 
 if [ "$SETTINGS_COUNT" = "0" ] || [ "$SETTINGS_COUNT" = "" ]; then
     echo "Initializing database with landlord SQL..."
 
     # Import the SQL file
     if [ -f "/var/www/growcrm/growcrm_landlord.sql" ]; then
-        mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USERNAME" -p"$DB_PASSWORD" "$LANDLORD_DB_DATABASE" < /var/www/growcrm/growcrm_landlord.sql
+        mysql $MYSQL_OPTS "$LANDLORD_DB_DATABASE" < /var/www/growcrm/growcrm_landlord.sql
         echo "SQL imported successfully!"
 
         # Update settings for Railway domain
         RAILWAY_DOMAIN="${RAILWAY_PUBLIC_DOMAIN:-growsass-production.up.railway.app}"
         echo "Updating settings for domain: $RAILWAY_DOMAIN"
 
-        mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USERNAME" -p"$DB_PASSWORD" "$LANDLORD_DB_DATABASE" -e "
+        mysql $MYSQL_OPTS "$LANDLORD_DB_DATABASE" -e "
             UPDATE settings SET
                 settings_base_domain = '$RAILWAY_DOMAIN',
                 settings_frontend_domain = '$RAILWAY_DOMAIN',
@@ -84,8 +88,8 @@ if [ "$SETTINGS_COUNT" = "0" ] || [ "$SETTINGS_COUNT" = "" ]; then
             WHERE settings_id = 'default';
         "
 
-        # Update admin user with known password (password: admin123)
-        mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USERNAME" -p"$DB_PASSWORD" "$LANDLORD_DB_DATABASE" -e "
+        # Update admin user with known password (password: password)
+        mysql $MYSQL_OPTS "$LANDLORD_DB_DATABASE" -e "
             UPDATE users SET
                 email = 'admin@example.com',
                 password = '\$2y\$10\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
