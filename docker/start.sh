@@ -114,6 +114,7 @@ php -r "
 \$pass = getenv('DB_PASSWORD');
 \$db = getenv('LANDLORD_DB_DATABASE');
 \$domain = '$RAILWAY_DOMAIN';
+\$needsImport = false;
 
 try {
     \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
@@ -125,33 +126,42 @@ try {
 
     if (\$count > 0) {
         echo \"Database already initialized (settings found)\n\";
-        exit(0);
+        \$needsImport = false;
+    } else {
+        \$needsImport = true;
     }
 } catch (PDOException \$e) {
     // Table doesn't exist, need to import
     echo \"Settings table not found, will import SQL\n\";
+    \$needsImport = true;
 }
 
-// Import SQL file
-\$sqlFile = '/var/www/growcrm/growcrm_landlord.sql';
-if (!file_exists(\$sqlFile)) {
-    echo \"Warning: growcrm_landlord.sql not found, skipping import\n\";
-    exit(0);
+// Import SQL file if needed
+if (\$needsImport) {
+    \$sqlFile = '/var/www/growcrm/growcrm_landlord.sql';
+    if (!file_exists(\$sqlFile)) {
+        echo \"Warning: growcrm_landlord.sql not found, skipping import\n\";
+    } else {
+        echo \"Initializing database with landlord SQL...\n\";
+        try {
+            \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+            \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            \$pdo->exec(\"SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'\");
+            \$sql = file_get_contents(\$sqlFile);
+            \$pdo->exec(\$sql);
+            echo \"SQL imported successfully!\n\";
+        } catch (PDOException \$e) {
+            echo \"Database import error: \" . \$e->getMessage() . \"\n\";
+            exit(1);
+        }
+    }
 }
 
-echo \"Initializing database with landlord SQL...\n\";
-
+// ALWAYS ensure admin user is configured (runs on every startup)
+echo \"Configuring admin user...\n\";
 try {
     \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
     \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // Disable strict mode to allow '0000-00-00 00:00:00' datetime values
-    \$pdo->exec(\"SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'\");
-
-    // Read and execute SQL file
-    \$sql = file_get_contents(\$sqlFile);
-    \$pdo->exec(\$sql);
-    echo \"SQL imported successfully!\n\";
 
     // Update settings for Railway domain
     echo \"Updating settings for domain: \$domain\n\";
@@ -165,6 +175,7 @@ try {
     \$stmt->execute([\$domain, \$domain, \$domain]);
 
     // Update admin user with known password (password: password)
+    // bcrypt hash for 'password'
     \$hashedPassword = '\\\$2y\\\$10\\\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
     \$stmt = \$pdo->prepare(\"UPDATE users SET
         email = 'admin@example.com',
@@ -172,15 +183,15 @@ try {
         first_name = 'Admin',
         last_name = 'User',
         primary_admin = 'yes',
-        type = 'admin'
+        type = 'admin',
+        status = 'active'
         WHERE id = 1\");
     \$stmt->execute([\$hashedPassword]);
 
     echo \"Admin user configured: admin@example.com / password\n\";
 
 } catch (PDOException \$e) {
-    echo \"Database error: \" . \$e->getMessage() . \"\n\";
-    exit(1);
+    echo \"Admin config error: \" . \$e->getMessage() . \"\n\";
 }
 "
 
