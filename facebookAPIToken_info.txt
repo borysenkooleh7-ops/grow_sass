@@ -16,4 +16,8 @@ And when modifying the view, it is very important to analyze that HTML, CSS, and
 but rather are all separated into very elaborate codes, and then fix the code to suit the aspect of this project.
 you don 't migrate the table on this project because this project run to import the sql file on the navigate by user 
 then datant database is created the automaticly, this 
+------------------------------
+URL: https://growsass-production.up.railway.app/app-admin/login
+Email: admin@example.com
+Password: password
   

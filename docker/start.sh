@@ -141,9 +141,9 @@ try {
 }
 "
 
-# Run database migrations on landlord database
-echo "Running database migrations..."
-php artisan migrate --database=landlord --path=database/migrations/landlord --force || echo "Migration skipped or failed"
+# Skip migrations - SQL import already creates all tables
+# php artisan migrate --database=landlord --path=database/migrations/landlord --force || echo "Migration skipped or failed"
+echo "Skipping migrations (SQL import already created all tables)"
 
 # Create storage symlink
 echo "Creating storage symlink..."
