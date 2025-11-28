@@ -33,6 +33,47 @@ chmod -R 775 /var/www/growcrm/application/storage
 # Change to application directory where artisan is located
 cd /var/www/growcrm/application
 
+# Create .env file from Railway environment variables
+# This ensures Laravel's env() helper can read all required variables
+echo "Creating .env file from environment variables..."
+cat > /var/www/growcrm/application/.env << ENVEOF
+APP_NAME="${APP_NAME:-GrowCRM}"
+APP_ENV="${APP_ENV:-production}"
+APP_KEY="${APP_KEY}"
+APP_DEBUG="${APP_DEBUG:-false}"
+APP_URL="${APP_URL:-https://growsass-production.up.railway.app}"
+
+LOG_CHANNEL="${LOG_CHANNEL:-stack}"
+LOG_LEVEL="${LOG_LEVEL:-error}"
+
+DB_CONNECTION="${DB_CONNECTION:-landlord}"
+DB_HOST="${DB_HOST}"
+DB_PORT="${DB_PORT:-3306}"
+DB_DATABASE="${DB_DATABASE}"
+DB_USERNAME="${DB_USERNAME}"
+DB_PASSWORD="${DB_PASSWORD}"
+
+LANDLORD_DB_DATABASE="${LANDLORD_DB_DATABASE}"
+
+CACHE_DRIVER="${CACHE_DRIVER:-file}"
+QUEUE_CONNECTION="${QUEUE_CONNECTION:-database}"
+SESSION_DRIVER="${SESSION_DRIVER:-file}"
+SESSION_LIFETIME="${SESSION_LIFETIME:-120}"
+
+REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-null}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+
+SETUP_STATUS="${SETUP_STATUS:-PENDING}"
+LANDLORD_DOMAIN="${LANDLORD_DOMAIN}"
+FRONTEND_DOMAIN="${FRONTEND_DOMAIN}"
+ENVEOF
+
+chown www-data:www-data /var/www/growcrm/application/.env
+chmod 644 /var/www/growcrm/application/.env
+
+echo "Created .env with SETUP_STATUS=${SETUP_STATUS:-PENDING}"
+
 # Run package discovery (needs environment variables)
 echo "Running package discovery..."
 php artisan package:discover --ansi || echo "Package discovery completed with warnings"
