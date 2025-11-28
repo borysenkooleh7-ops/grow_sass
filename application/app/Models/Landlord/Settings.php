@@ -16,6 +16,8 @@ class Settings extends Model {
 
     protected $table = 'settings';
     protected $primaryKey = 'settings_id';
+    protected $keyType = 'string';
+    public $incrementing = false;
     protected $dateFormat = 'Y-m-d H:i:s';
     protected $guarded = ['settings_id'];
     const CREATED_AT = 'settings_created';

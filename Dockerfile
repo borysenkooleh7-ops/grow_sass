@@ -69,7 +69,7 @@ RUN touch application/.env && \
     echo "APP_KEY=base64:temporary_key_for_build_only_replace_me=" >> application/.env
 
 # Create required directories
-RUN mkdir -p application/storage/logs application/storage/framework/cache application/storage/framework/sessions application/storage/framework/views application/bootstrap/cache
+RUN mkdir -p application/storage/logs application/storage/framework/cache application/storage/framework/sessions application/storage/framework/views application/bootstrap/cache updates-saas
 
 # Set permissions before composer install
 RUN chmod -R 775 application/storage application/bootstrap/cache

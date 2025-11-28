@@ -21,6 +21,7 @@ mkdir -p /var/www/growcrm/application/storage/framework/sessions
 mkdir -p /var/www/growcrm/application/storage/framework/testing
 mkdir -p /var/www/growcrm/application/storage/framework/views
 mkdir -p /var/www/growcrm/application/storage/logs
+mkdir -p /var/www/growcrm/updates-saas
 
 # Fix permissions early
 echo "Setting permissions..."
@@ -28,6 +29,7 @@ chown -R www-data:www-data /var/www/growcrm
 chmod -R 775 /var/www/growcrm/storage || true
 chmod -R 775 /var/www/growcrm/application/bootstrap/cache
 chmod -R 775 /var/www/growcrm/updates
+chmod -R 775 /var/www/growcrm/updates-saas
 chmod -R 775 /var/www/growcrm/application/storage
 
 # Change to application directory where artisan is located
