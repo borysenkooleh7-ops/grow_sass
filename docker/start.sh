@@ -102,6 +102,9 @@ try {
     \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
     \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+    // Disable strict mode to allow '0000-00-00 00:00:00' datetime values
+    \$pdo->exec(\"SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'\");
+
     // Read and execute SQL file
     \$sql = file_get_contents(\$sqlFile);
     \$pdo->exec(\$sql);
