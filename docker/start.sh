@@ -149,11 +149,17 @@ echo "Skipping migrations (SQL import already created all tables)"
 echo "Creating storage symlink..."
 php artisan storage:link || echo "Storage link already exists"
 
-# Cache configuration (skip route cache due to serialization issues)
-echo "Caching configuration..."
-php artisan config:cache || echo "Config cache failed"
+# DO NOT cache configuration - env() calls need to work at runtime for SETUP_STATUS check
+# php artisan config:cache || echo "Config cache failed"
+echo "Skipping config cache (env() calls need to work at runtime)"
+
+# Clear any existing config cache to ensure env() works
+php artisan config:clear || true
+
 # Skip route cache - causes serialization errors with install routes
 # php artisan route:cache || echo "Route cache failed"
+
+# Cache views only
 php artisan view:cache || echo "View cache failed"
 
 # Create supervisor log directory
