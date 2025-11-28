@@ -44,7 +44,7 @@ class Authenticate extends Controller {
     public function logIn() {
 
         //show login page
-        Auth::logout();
+        Auth::guard('landlord')->logout();
         return view('landlord/authentication/login');
     }
 
@@ -86,10 +86,10 @@ class Authenticate extends Controller {
      */
     public function logInAction(Request $request) {
 
-        //check credentials
-        if (Auth::attempt(['email' => $request->email, 'password' => $request->password], true)) {
-            if (auth()->user()->status != 'active') {
-                auth()->logout();
+        //check credentials using landlord guard
+        if (Auth::guard('landlord')->attempt(['email' => $request->email, 'password' => $request->password], true)) {
+            if (Auth::guard('landlord')->user()->status != 'active') {
+                Auth::guard('landlord')->logout();
                 abort(409, __('lang.account_has_been_suspended'));
             }
         } else {
